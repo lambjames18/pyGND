@@ -1,0 +1,60 @@
+function disori = deltathetakV4(gA,gB,k,symOp)
+
+%global symOp
+
+% determine how many symmetry cases to evaluate
+numSym = size(symOp);
+
+% preallocate number of unique misorientations to calc so disorientation
+% can be found
+misori_matrix = zeros((numSym(1,3))^2,1);
+
+% preallocate iterators
+gA_iter = 1;
+gB_iter = 1;
+
+% if material points have same orientation, ignore this process
+if gB ~= gA
+    % lines 17-37 correspond to misorientation calc with ori matrices
+    for delg_iter = 1:(numSym(1,3)^2)
+        gA_temp = symOp(:,:,gA_iter)*gA*transpose(symOp(:,:,gA_iter));
+        gB_temp = symOp(:,:,gB_iter)*gB*transpose(symOp(:,:,gB_iter));
+        delg = gB_temp/gA_temp;
+        
+        % calculate delta theta, skip trace(delg) function for speed
+        deltheta = acos(((sum(diag(delg)))-1)/2);
+        
+        if deltheta == 0
+            misori_matrix(delg_iter) = 0;
+        elseif k == 1
+            misori_matrix(delg_iter) = -(delg(2,3)-...
+                delg(3,2))*(deltheta/(2*sin(deltheta)));
+        elseif k == 2
+            misori_matrix(delg_iter) = -(delg(3,1)-...
+                delg(1,3))*(deltheta/(2*sin(deltheta)));
+        elseif k == 3
+            misori_matrix(delg_iter) = -(delg(1,2)-...
+                delg(2,1))*(deltheta/(2*sin(deltheta)));
+        else
+            misori_matrix(delg_iter) = 0;
+        end
+        % storing misorientation with specific symmetry operator applied
+
+        if (gB_iter == numSym(1,3))
+            gB_iter = 1;
+            gA_iter = gA_iter + 1;
+        else
+            gB_iter = gB_iter +1;
+        end
+    end
+
+    % finding lowest value of misorientation (disorientation)
+    [~,d_col] = min(abs(misori_matrix),[],1);
+
+    % return disorientation
+    disori = misori_matrix(d_col);
+else
+    disori = 0;
+end
+
+end
