@@ -1,6 +1,25 @@
 import numpy as np
 
 
+def eu2om_multi(eu: np.ndarray):
+    thr = 1e-10
+    shape = eu.shape
+    vol_shape = shape[:-1]
+    eu_flat = eu.reshape(-1, 3)
+    phi1 = eu_flat[:, 0]
+    Phi = eu_flat[:, 1]
+    phi2 = eu_flat[:, 2]
+    c1, c2, c3 = np.cos(phi1), np.cos(Phi), np.cos(phi2)
+    s1, s2, s3 = np.sin(phi1), np.sin(Phi), np.sin(phi2)
+    om = np.array([[c1*c3-s1*c2*s3,  s1*c3+c1*c2*s3, s2*s3],
+                  [-c1*s3-s1*c2*c3, -s1*s3+c1*c2*c3, s2*c3],
+                  [s1*s2, -c1*s2, c2]])
+    print(om.shape)
+    om = np.where(np.abs(om) < thr, 0.0, om)
+    return om.reshape((3, 3) + vol_shape)
+
+
+
 def eu2om(eu):
     """Euler angles bunge convention to orientation matrix
     Args:
@@ -33,51 +52,51 @@ def eu2om_mod(eu: np.ndarray):
 
 def determine_neighborhood(index, micro_max, micro, featIDs):
     #global microMax featIDs micro
-    x = micro[index, 2]  #setting x coordinate
-    y = micro[index, 1]  #setting y coordinate
-    z = micro[index, 0]  #setting z coordinate
+    x1 = micro[index, 2]  #setting x coordinate
+    x2 = micro[index, 1]  #setting y coordinate
+    x3 = micro[index, 0]  #setting z coordinate
 
     print("DETERMINE NEIGHBORHOOD FUNCTION NEEDS TO VERIFY IF STATEMENT INDICE CONDITIONS")
     # checking completeness of the voxel neighborhood in x dimension
-    if x == 0:
+    if x1 == 0:
         XenvCompleteness = 'forward'
-    elif x == micro_max(0,2) + 1:
+    elif x1 == micro_max[0, 0] + 1:
         XenvCompleteness = 'backward'
-    elif featIDs[x,y,z] == featIDs[x+1, y, z] & featIDs[x, y, z] != featIDs[x-1, y, z]:
+    elif featIDs[x1, x2, x3] == featIDs[x1+1, x2, x3] & featIDs[x1, x2, x3] != featIDs[x1-1, x2, x3]:
         XenvCompleteness = 'forward'
-    elif featIDs[x,y,z] != featIDs[x+1,y,z] & featIDs[x,y,z] == featIDs[x-1,y,z]:
+    elif featIDs[x1, x2, x3] != featIDs[x1+1, x2, x3] & featIDs[x1, x2, x3] == featIDs[x1-1, x2, x3]:
         XenvCompleteness = 'backward'
-    elif featIDs[x,y,z] == featIDs[x+1,y,z] & featIDs[x,y,z] == featIDs[x-1,y,z]:
+    elif featIDs[x1, x2, x3] == featIDs[x1+1, x2, x3] & featIDs[x1, x2, x3] == featIDs[x1-1, x2, x3]:
         XenvCompleteness = 'central'
     else:
         XenvCompleteness = 'constant'
 
     # checking completeness of the voxel neighborhood in y dimension    
 
-    if y == 0:
+    if x2 == 0:
         YenvCompleteness = 'forward'
-    elif y == micro_max[0, 1] + 1:
+    elif x2 == micro_max[0, 1] + 1:
         YenvCompleteness = 'backward'
-    elif featIDs[x,y,z] == featIDs[x,y+1,z] & featIDs[x,y,z] != featIDs[x,y-1,z]:
+    elif featIDs[x1, x2, x3] == featIDs[x1, x2+1, x3] & featIDs[x1, x2, x3] != featIDs[x1, x2-1, x3]:
         YenvCompleteness = 'forward'
-    elif featIDs[x,y,z] != featIDs[x,y+1,z] & featIDs[x,y,z] == featIDs[x,y-1,z]:
+    elif featIDs[x1, x2, x3] != featIDs[x1, x2+1, x3] & featIDs[x1, x2, x3] == featIDs[x1, x2-1, x3]:
         YenvCompleteness = 'backward'
-    elif featIDs[x,y,z] == featIDs[x,y+1,z] & featIDs[x,y,z] == featIDs[x,y-1,z]:
+    elif featIDs[x1, x2, x3] == featIDs[x1, x2+1, x3] & featIDs[x1, x2, x3] == featIDs[x1, x2-1, x3]:
         YenvCompleteness = 'central'
     else:
         YenvCompleteness = 'constant'
 
     # checking completeness of the voxel neighborhood in z dimension 
 
-    if z == 0:
+    if x3 == 0:
         ZenvCompleteness = 'forward'
-    elif z == micro_max[0, 0] + 1:
+    elif x3 == micro_max[0, 2] + 1:
         ZenvCompleteness = 'backward'
-    elif featIDs[x,y,z] == featIDs[x,y,z+1] & featIDs[x,y,z] != featIDs[x,y,z-1]:
+    elif featIDs[x1, x2, x3] == featIDs[x1, x2, x3+1] & featIDs[x1, x2, x3] != featIDs[x1, x2, x3-1]:
         ZenvCompleteness = 'forward'
-    elif featIDs[x,y,z] != featIDs[x,y,z+1] & featIDs[x,y,z] == featIDs[x,y,z-1]:
+    elif featIDs[x1, x2, x3] != featIDs[x1, x2, x3+1] & featIDs[x1, x2, x3] == featIDs[x1, x2, x3-1]:
         ZenvCompleteness = 'backward'
-    elif featIDs[x,y,z] == featIDs[x,y,z+1] & featIDs[x,y,z] == featIDs[x,y,z-1]:
+    elif featIDs[x1, x2, x3] == featIDs[x1, x2, x3+1] & featIDs[x1, x2, x3] == featIDs[x1, x2, x3-1]:
         ZenvCompleteness = 'central'
     else:
         ZenvCompleteness = 'constant'
@@ -138,17 +157,17 @@ def deltathetakV4(gA, gB, k, symOp):
     return disori
 
 
-def determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x, y, z, symOp):
+def determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x1, x2, x3, symOp):
 
     # determine misorientation and kappa based on material point neighborhood
     dthe = np.zeros((3,3))
 
     # orientation matrix of material point
-    gA = GAO[:, :, x, y, z]
+    gA = GAO[:, :, x1, x2, x3]
 
     # switch statement evaluating expression for x environment
     if XenvCompleteness == 'backward':
-        gE = GAO[:, :, x-1, y, z]  #setting Euler Angle at x - 1
+        gE = GAO[:, :, x1-1, x2, x3]  #setting Euler Angle at x - 1
         # First Nearest Neighbors 1st order backward difference----
         diffOperatorX = 1
         # calc specific miorientation angles for kappa calc
@@ -157,7 +176,7 @@ def determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x,
         dthe[2, 0] = deltathetakV4(gE, gA, 2, symOp)
         
     elif XenvCompleteness ==  'forward':
-        gB = GAO[:, :, x+1, y, z]  #setting Euler Angle at x + 1
+        gB = GAO[:, :, x1+1, x2, x3]  #setting Euler Angle at x + 1
         # First Nearest Neighbors 1st order forward difference-----
         diffOperatorX = 1
         # calc specific miorientation angles for kappa calc
@@ -166,8 +185,8 @@ def determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x,
         dthe[2, 0] = deltathetakV4(gA, gB, 2, symOp)
         
     elif XenvCompleteness == 'central':
-        gB = GAO[:, :, x+1, y, z]  #setting Euler Angle at x + 1
-        gE = GAO[:, :, x-1, y, z]  #setting Euler Angle at x - 1
+        gB = GAO[:, :, x1+1, x2, x3]  #setting Euler Angle at x + 1
+        gE = GAO[:, :, x1-1, x2, x3]  #setting Euler Angle at x - 1
         # central finite difference
         diffOperatorX = 2
         # calc specific miorientation angles for kappa calc
@@ -184,7 +203,7 @@ def determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x,
 
     # switch statement evaluating expression for y environment
     if YenvCompleteness == 'backward':
-        gF = GAO[:, :, x, y-1, z]  #setting Euler Angle at y - 1
+        gF = GAO[:, :, x1, x2-1, x3]  #setting Euler Angle at y - 1
         # First Nearest Neighbors 1st order backward difference----
         diffOperatorY = 1
         # calc specific miorientation angles for kappa calc
@@ -193,7 +212,7 @@ def determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x,
         dthe[2, 1] = deltathetakV4(gF, gA, 2, symOp)
         
     elif YenvCompleteness == 'forward':
-        gC = GAO[:, :, x, y+1, z]  #setting Euler Angle at y + 1
+        gC = GAO[:, :, x1, x2+1, x3]  #setting Euler Angle at y + 1
         # First Nearest Neighbors 1st order forward difference----
         diffOperatorY = 1
         # calc specific miorientation angles for kappa calc
@@ -202,8 +221,8 @@ def determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x,
         dthe[2, 1] = deltathetakV4(gA, gC, 2, symOp)
         
     elif YenvCompleteness == 'central':
-        gC = GAO[:, :, x, y+1, z]  #setting Euler Angle at y + 1
-        gF = GAO[:, :, x, y-1, z]  #setting Euler Angle at y - 1
+        gC = GAO[:, :, x1, x2+1, x3]  #setting Euler Angle at y + 1
+        gF = GAO[:, :, x1, x2-1, x3]  #setting Euler Angle at y - 1
         # central finite difference
         diffOperatorY = 2
         # calc specific miorientation angles for kappa calc
@@ -220,7 +239,7 @@ def determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x,
 
     # switch statement evaluating expression for environment
     if ZenvCompleteness == 'backward':
-        gG = GAO[:, :, x, y, z-1]  #setting Euler Angle at z - 1
+        gG = GAO[:, :, x1, x2, x3-1]  #setting Euler Angle at z - 1
         # First Nearest Neighbors 1st order backward difference----
         diffOperatorZ = 1
         # calc specific miorientation angles for kappa calc
@@ -229,7 +248,7 @@ def determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x,
         dthe[2,2] = deltathetakV4(gG, gA, 2, symOp)
         
     elif ZenvCompleteness == 'forward':
-        gD = GAO[:, :, x, y, z+1]  #setting Euler Angle at z + 1
+        gD = GAO[:, :, x1, x2, x3+1]  #setting Euler Angle at z + 1
         # First Nearest Neighbors 1st order forward difference-----
         diffOperatorZ = 1
         # calc specific miorientation angles for kappa calc
@@ -238,8 +257,8 @@ def determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x,
         dthe[2, 2] = deltathetakV4(gA, gD, 2, symOp)
         
     elif ZenvCompleteness == 'central':
-        gD = GAO[:, :, x, y, z+1]  #setting Euler Angle at z + 1
-        gG = GAO[:, :, x, y, z-1]  #setting Euler Angle at z - 1
+        gD = GAO[:, :, x1, x2, x3+1]  #setting Euler Angle at z + 1
+        gG = GAO[:, :, x1, x2, x3-1]  #setting Euler Angle at z - 1
         diffOperatorZ = 2
         # calc specific miorientation angles for kappa calc
         dthe[0, 2] = deltathetakV4(gG, gD, 0, symOp)
@@ -323,25 +342,25 @@ def L2_SparseV2(alpha, cs, A, B, burgers):
     return dd
 
 
-def GND(index, micro_max, featIDs, micro, GAO, cs, indexmax, symOp, spacing, A, B, burgers, featureData):
+def GND(index, micro_max, featIDs, micro, GAO, cs, indexmax, symOp, spacing, A, B, burgers):
     # Define spacing
     X_spacing = spacing[2]
     Y_spacing = spacing[1]
     Z_spacing = spacing[0]
     # Get coordinates
-    x = micro[index, 2]  #setting x coordinate
-    y = micro[index, 1]  #setting y coordinate
-    z = micro[index, 0]  #setting z coordinate
+    x1 = micro[index, 0].astype(int)  #setting z coordinate
+    x2 = micro[index, 1].astype(int)  #setting y coordinate
+    x3 = micro[index, 2].astype(int)  #setting x coordinate
 
     # no calculations if inside void or outside microstructure
 
-    if GAO[:, :, x, y, z].sum() != 0:
+    if GAO[:, :, x1, x2, x3].sum() != 0:
 
         XenvCompleteness, YenvCompleteness, ZenvCompleteness = determine_neighborhood(index, micro_max, micro, featIDs)
 
         # Determine Disorientation between material points and neighbors,
         # influenced by neighborhood -- Calculate kappa for material points
-        dthe, diffOperatorX, diffOperatorY, diffOperatorZ = determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x, y, z, symOp)
+        dthe, diffOperatorX, diffOperatorY, diffOperatorZ = determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x1, x2, x3, symOp)
 
         # Calculate average misorientation from dthe
         avg_misori = np.mean(np.abs(dthe))
@@ -350,7 +369,7 @@ def GND(index, micro_max, featIDs, micro, GAO, cs, indexmax, symOp, spacing, A, 
         
         # Convert Kappa to crystal coordinates since dislocations are
         # described in crystal coordinates
-        kappaSRprime = GAO[:, :, x, y, z].T * kappaSR * GAO[:, :, x, y, z]
+        kappaSRprime = GAO[:, :, x1, x2, x3].T * kappaSR * GAO[:, :, x1, x2, x3]
         
         # Calculate Nye Tensor (alpha) from curvature kappa  
         alphaSR = kappaSRprime.T - np.trace(kappaSRprime)
@@ -384,7 +403,6 @@ def import_data(data_path: str, grain_path: str):
     Needs to be changed to read in sample scaling/resolution"""
     micro = np.loadtxt(data_path, delimiter=',', dtype=float)
     GrainIDs = np.loadtxt(grain_path, delimiter=',', dtype=int)
-    featureData = 0
 
     X_scaling = 1.5
     Y_scaling = 1.5
@@ -400,7 +418,7 @@ def import_data(data_path: str, grain_path: str):
     micro[:, 0] = np.int32(micro[:, 0] / Z_scaling)  # z
 
     # micro: 1st column: z, 2nd column: y, 3rd column: x, 4th column: phi1, 5th column: Phi, 6th column: phi2
-    return micro, GrainIDs, spacing, featureData
+    return micro, GrainIDs, spacing
 
 
 def symmetry_operators(cs):
@@ -439,7 +457,6 @@ def symmetry_operators(cs):
         sym24 = np.array([[ 0, -1,  0], [ 1,  0,  0], [ 0,  0, -1]])
         
         symOp = np.dstack((sym1, sym2, sym3, sym4, sym5, sym6, sym7, sym8, sym9, sym10, sym11, sym12, sym13, sym14, sym15, sym16, sym17, sym18, sym19, sym20, sym21, sym22, sym23, sym24))
-        print(symOp.shape)
         
     elif cs == 3:
         # there are 12 symmetry operators for hexagonal symmetries
@@ -461,7 +478,6 @@ def symmetry_operators(cs):
         sym12 = np.array([[0.5, -a, 0], [-a, -0.5, 0], [0, 0, -1]])
         
         symOp = np.dstack((sym1, sym2, sym3, sym4, sym5, sym6, sym7, sym8, sym9, sym10, sym11, sym12))
-        print(symOp.shape)
     else:
         print('\nWarning! Crystal structure is not known. No symmetry operators have been defined.\n\n')
     return symOp

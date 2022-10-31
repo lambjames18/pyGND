@@ -1,4 +1,5 @@
 import numpy as np
+import h5py
 
 import py_functions as pf
 
@@ -15,24 +16,39 @@ burgers = burgers * 1e-10
 symOp = pf.symmetry_operators(cs)
 
 # Read data
-micro, GrainIDs, spacing, featureData = pf.import_data()
+h = h5py.File("D:/Research/R2_Sample10-Shot5/Data/3D/R2S10S5.dream3d")
+spacing = np.squeeze(h["DataContainers/ImageDataContainer/_SIMPL_GEOMETRY/SPACING"][...])
+featIDs = np.squeeze(h["DataContainers/ImageDataContainer/CellData/FeatureIds"][...])
+euler = np.squeeze(h["DataContainers/ImageDataContainer/CellData/EulerAngles"][...])
+# Get xyz
+x1, x2, x3 = np.indices(featIDs.shape)
+# Make microstructure
+# micro, GrainIDs, spacing = pf.import_data()
 
-micro_max = np.amax(micro, axis=0)  # provides the maximum x, y, z values
-micro_min = np.amin(micro, axis=0)  # provides the minimum x, y, z values
-indexmax = micro.shape[0]  # provides the number of entries
+micro_max = np.array([x1.max(), x2.max(), x3.max()])  # provides the maximum x, y, z values
+micro_min = np.array([x1.min(), x2.min(), x3.min()])  # provides the minimum x, y, z values
+indexmax = featIDs.size  # provides the number of entries
 
 # preallocate multidimensional arrays
-dd = np.zeros((numSlip,1))
+dd = np.zeros(numSlip)
 
 # create multidimensional arrays for Euler Angles and Feature IDs
 # uses the maximum spacial dimensions to create the arrays
-phi1 = np.zeros((micro_max[2]+1, micro_max[1]+1, micro_max[0]+1))  # shape (x_length, y_length, z_length)
-Phi  = np.zeros((micro_max[2]+1, micro_max[1]+1, micro_max[0]+1))  # shape (x_length, y_length, z_length)
-phi2 = np.zeros((micro_max[2]+1, micro_max[1]+1, micro_max[0]+1))  # shape (x_length, y_length, z_length)
-featIDs = np.zeros((micro_max[2]+1, micro_max[1]+1, micro_max[0]+1))  # shape (x_length, y_length, z_length)
-misori  = np.zeros((micro_max[2]+1, micro_max[1]+1, micro_max[0]+1))  # shape (x_length, y_length, z_length)
+# phi1 = np.zeros((micro_max[0]+1, micro_max[1]+1, micro_max[2]+1))  # shape (x_length, y_length, z_length)
+# Phi  = np.zeros((micro_max[0]+1, micro_max[1]+1, micro_max[2]+1))  # shape (x_length, y_length, z_length)
+# phi2 = np.zeros((micro_max[0]+1, micro_max[1]+1, micro_max[2]+1))  # shape (x_length, y_length, z_length)
+# featIDs = np.zeros((micro_max[0]+1, micro_max[1]+1, micro_max[2]+1))  # shape (x_length, y_length, z_length)
+# misori = np.zeros((micro_max[0]+1, micro_max[1]+1, micro_max[2]+1))  # shape (x_length, y_length, z_length)
+# GAO  = np.zeros((3, 3, micro_max[2]+1, micro_max[1]+1, micro_max[0]+1))  # shape (3, 3, x_length, y_length, z_length)
+phi1 = euler[:, :, :, 0]
+Phi = euler[:, :, :, 1]
+phi2 = euler[:, :, :, 2]
+misori  = np.zeros(featIDs.shape)
+
 # Create orientation matrix for each point
-GAO  = np.zeros((3, 3, micro_max[2]+1, micro_max[1]+1, micro_max[0]+1))  # shape (3, 3, x_length, y_length, z_length)
+print("Creating orientation matrices...")
+GAO = pf.eu2om_multi(euler)
+print(GAO.shape)
 
 # create array for total GND density at each material point
 GNDarraySR = np.zeros(indexmax)
@@ -40,35 +56,14 @@ GNDarrayLR = np.zeros(indexmax)
 GNDarraySS = np.zeros((indexmax, numSlip))
 
 # create array for avg misorientation at each material point
-misoriArray = np.zeros((indexmax,1))
+misoriArray = np.zeros(indexmax)
 
-microTEMP = np.copy(micro)
-microTEMP[:, :3] = microTEMP[:, :3]
-
-grainIDsTEMP = GrainIDs[:, 0]
-grainIDsTEMP = np.int32(grainIDsTEMP)
-
-#create 3D matrices with associated Euler angles and featureIDs
-for index in range(indexmax):
-    x = microTEMP[index, 2] + 1  #setting temp x coordinate
-    y = microTEMP[index, 1] + 1  #setting temp y coordinate
-    z = microTEMP[index, 0] + 1  #setting temp z coordinate
-    phi1[x, y, z] = microTEMP[index,3]  #first Euler angle for 3D coordinate
-    Phi[x, y, z] = microTEMP[index,4]
-    phi2[x, y, z] = microTEMP[index,5]
     
-    # convert to orientation matrices
-    gA = pf.eu2om_mod(np.array([phi1[x,y,z], Phi[x,y,z], phi2[x,y,z]]))
-    
-    # store orientation of voxel
-    GAO[:, :, x, y, z] = gA
-    featIDs[x, y, z] = grainIDsTEMP[index, 0]
-    
-    # uncomment line for GNDs across GB 
-    # RESULTS IN LOSS OF FEATURE DATA
-    #featIDs(x,y,z) = 1;
+# uncomment line for GNDs across GB 
+# RESULTS IN LOSS OF FEATURE DATA
+#featIDs(x,y,z) = 1;
 
-
+exit()
 
 ###########################################################################
 # ---------------------- START OF MAIN LOOP -------------------------------
@@ -95,8 +90,7 @@ for index in range(micro.shape[0]):
                                                              spacing,
                                                              A,
                                                              B,
-                                                             burgers,
-                                                             featureData)
+                                                             burgers)
 
 
 
