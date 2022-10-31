@@ -15,7 +15,7 @@ burgers = burgers * 1e-10
 symOp = pf.symmetry_operators(cs)
 
 # Read data
-micro, GrainIDs, X_spacing, Y_spacing, Z_spacing, featureData = pf.import_data()
+micro, GrainIDs, spacing, featureData = pf.import_data()
 
 micro_max = np.amax(micro, axis=0)  # provides the maximum x, y, z values
 micro_min = np.amin(micro, axis=0)  # provides the minimum x, y, z values
@@ -35,8 +35,8 @@ misori  = np.zeros((micro_max[2]+1, micro_max[1]+1, micro_max[0]+1))  # shape (x
 GAO  = np.zeros((3, 3, micro_max[2]+1, micro_max[1]+1, micro_max[0]+1))  # shape (3, 3, x_length, y_length, z_length)
 
 # create array for total GND density at each material point
-GNDarraySR = np.zeros((indexmax, 1))
-GNDarrayLR = np.zeros((indexmax, 1))
+GNDarraySR = np.zeros(indexmax)
+GNDarrayLR = np.zeros(indexmax)
 GNDarraySS = np.zeros((indexmax, numSlip))
 
 # create array for avg misorientation at each material point
@@ -83,244 +83,106 @@ for index in range(indexmax):
 #
 # Indicate start of GND computation 
 print('\n\nStarting parallel computations....\n\n')
-limit1 = np.int32(indexmax / 8)  # used to define the indices to use for each part of the computation
-microTEMP = micro[:limit1, :3]
-zOffset1 = 1 + micro[limit1, 0]
-featIDsTEMP = featIDs[:, :, :zOffset1+1]
-GAOTEMP = GAO[:, :, :, :, :zOffset1+1]
-zOffset2 = 0
-zOffset1 = 0
+for index in range(micro.shape[0]):
+    GNDarraySR, GNDarrayLR, misoriArray, GNDarraySS = pf.GND(index,
+                                                             micro_max,
+                                                             featIDs,
+                                                             micro,
+                                                             GAO,
+                                                             cs,
+                                                             indexmax,
+                                                             symOp,
+                                                             spacing,
+                                                             A,
+                                                             B,
+                                                             burgers,
+                                                             featureData)
 
-#  ---------------------------------------------------------------------
-for index in range(limit1):
-    GNDarraySR[index, 0], GNDarrayLR[index, 0], misoriArray[index, 0] ,GNDarraySS[index] = pf.GND(index, micro_max, featIDsTEMP, microTEMP, GAOTEMP, cs, indexmax, symOp, X_spacing, Y_spacing, Z_spacing, A, B, burgers, featureData, zOffset1, zOffset2)
 
-# Progress update ---------------------------
-print('\n\nProgress: 12.5%%\n')
-print('[>>>---------------------]\n')
 
-limit2 = np.int32(indexmax/4)
-
-# Memory management -------------------------
+###########################################################################
+# ------------------------ END OF MAIN LOOP -------------------------------
+###########################################################################
 #
-microTEMP = micro[limit1:limit2, :3]
-microTEMP = microTEMP / reduction
+# resolve GND array into spatially resolved material points for
+# visualization via .vtk output files
 
-zOffset1 = micro[limit1, 0] / reduction - 1
-if zOffset1 < 1:
-    zOffset1 = 1
+print('\n\nSaving Data...\n\n')
 
-zOffset2 = micro[limit2, 0] / reduction + 1
-featIDsTEMP = featIDs[:, :, zOffset1:zOffset2]
-GAOTEMP = GAO[:, :, :, :, zOffset1:zOffset2]
-# ---------------------------------------------------------------------
-parfor index = limit1:limit2
-    [GNDarraySR(index,1),GNDarrayLR(index,1),misoriArray(index,1),GNDarraySS(index,:)] = ...
-        calcGND(index-limit1+1,microMax,featIDsTEMP,microTEMP,GAOTEMP,cs,indexmax,symOp,...
-        X_spacing,Y_spacing,Z_spacing,A,B,burgers,reduction,featureData,zOffset1,zOffset2);  
+GND_SR = np.zeros(micro_max[2] + 1, micro_max[1] + 1,micro_max[0] + 1)
+GND_LR = np.zeros(micro_max[2] + 1, micro_max[1] + 1,micro_max[0] + 1)
+GND_SS = np.zeros(micro_max[2] + 1, micro_max[1] + 1,micro_max[0] + 1, numSlip)
 
-# Progress update
-print('\n\nProgress: 25.0%%\n');
-print('[>>>>>>------------------]\n');
+if cs == 3 & numSlip == 33:
+    GND_basal = np.zeros(micro_max[2] + 1, micro_max[1] + 1, micro_max[0] + 1)
+    GND_pris = np.zeros(micro_max[2] + 1, micro_max[1] + 1, micro_max[0] + 1)
+    GND_pyr = np.zeros(micro_max[2] + 1, micro_max[1] + 1, micro_max[0] + 1)
+elif cs == 2 & numSlip == 52:
+    GND_s = np.zeros(micro_max[2] + 1, micro_max[1] + 1, micro_max[0] + 1)
+    GND_110 = np.zeros(micro_max[2] + 1, micro_max[1] + 1, micro_max[0] + 1)
+    GND_112 = np.zeros(micro_max[2] + 1, micro_max[1] + 1, micro_max[0] + 1)
+    GND_123 = np.zeros(micro_max[2] + 1, micro_max[1] + 1, micro_max[0] + 1)
 
-limit3 = np.int32(indexmax/2 - indexmax/8)
-microTEMP = micro[limit2:limit3, :3]
-microTEMP = microTEMP/reduction
+microTEMP = np.copy(micro)
+grainIDsTEMP = np.int32(GrainIDs[:, 0])
 
-zOffset1 = (tallMicro(limit2,1)/reduction)-1;
-zOffset1 = gather(zOffset1);
-zOffset2 = (tallMicro(limit3,1)/reduction)+1;
-zOffset2 = gather(zOffset2);
-featIDsTEMP = featIDs(:,:,zOffset1:zOffset2);
-GAOTEMP = GAO(:,:,:,:,zOffset1:zOffset2);
-
-% %%% ---------------------------------------------------------------------
-parfor index = limit2:limit3
-    [GNDarraySR(index,1),GNDarrayLR(index,1),misoriArray(index,1),GNDarraySS(index,:)] = ...
-        calcGND(index-limit2+1,microMax,featIDsTEMP,microTEMP,GAOTEMP,cs,indexmax,symOp,...
-        X_spacing,Y_spacing,Z_spacing,A,B,burgers,reduction,featureData,zOffset1,zOffset2);   
-end
-
-% Progress update
-clc
-fprintf('\n\nProgress: 37.5%%\n');
-fprintf('[>>>>>>>>>---------------]\n');
-%
-limit4 = int32(indexmax/2);
-microTEMP = tallMicro(limit3:limit4,1:3);
-microTEMP = gather(microTEMP);
-microTEMP = microTEMP/reduction;
-
-zOffset1 = (tallMicro(limit3,1)/reduction)-1;
-zOffset1 = gather(zOffset1);
-zOffset2 = (tallMicro(limit4,1)/reduction)+1;
-zOffset2 = gather(zOffset2);
-featIDsTEMP = featIDs(:,:,zOffset1:zOffset2);
-GAOTEMP = GAO(:,:,:,:,zOffset1:zOffset2);
-% %%% ---------------------------------------------------------------------
-parfor index = limit3:limit4
-    [GNDarraySR(index,1),GNDarrayLR(index,1),misoriArray(index,1),GNDarraySS(index,:)] = ...
-        calcGND(index-limit3+1,microMax,featIDsTEMP,microTEMP,GAOTEMP,cs,indexmax,symOp,...
-        X_spacing,Y_spacing,Z_spacing,A,B,burgers,reduction,featureData,zOffset1,zOffset2);    
-end
-
-% Progress update
-clc
-fprintf('\n\nProgress: 50.0%%\n');
-fprintf('[>>>>>>>>>>>>------------]\n');
-
-limit5 = int32(indexmax/2 + indexmax/8);
-microTEMP = tallMicro(limit4:limit5,1:3);
-microTEMP = gather(microTEMP);
-microTEMP = microTEMP/reduction;
-
-zOffset1 = (tallMicro(limit4,1)/reduction)-1;
-zOffset1 = gather(zOffset1);
-zOffset2 = (tallMicro(limit5,1)/reduction)+1;
-zOffset2 = gather(zOffset2);
-featIDsTEMP = featIDs(:,:,zOffset1:zOffset2);
-GAOTEMP = GAO(:,:,:,:,zOffset1:zOffset2);
-% %%% ---------------------------------------------------------------------
-parfor index = limit4:limit5
-    [GNDarraySR(index,1),GNDarrayLR(index,1),misoriArray(index,1),GNDarraySS(index,:)] = ...
-        calcGND(index-limit4+1,microMax,featIDsTEMP,microTEMP,GAOTEMP,cs,indexmax,symOp,...
-        X_spacing,Y_spacing,Z_spacing,A,B,burgers,reduction,featureData,zOffset1,zOffset2);  
-end
-
-% Progress update
-clc
-fprintf('\n\nProgress: 62.5%%\n');
-fprintf('[>>>>>>>>>>>>>>>---------]\n');
-
-limit6 = int32(indexmax/2 + indexmax/4);
-microTEMP = tallMicro(limit5:limit6,1:3);
-microTEMP = gather(microTEMP);
-microTEMP = microTEMP/reduction;
-
-zOffset1 = (tallMicro(limit5,1)/reduction)-1;
-zOffset1 = gather(zOffset1);
-zOffset2 = (tallMicro(limit6,1)/reduction)+1;
-zOffset2 = gather(zOffset2);
-featIDsTEMP = featIDs(:,:,zOffset1:zOffset2);
-GAOTEMP = GAO(:,:,:,:,zOffset1:zOffset2);
-% %%% ---------------------------------------------------------------------
-parfor index = limit5:limit6
-    [GNDarraySR(index,1),GNDarrayLR(index,1),misoriArray(index,1),GNDarraySS(index,:)] = ...
-        calcGND(index-limit5+1,microMax,featIDsTEMP,microTEMP,GAOTEMP,cs,indexmax,symOp,...
-        X_spacing,Y_spacing,Z_spacing,A,B,burgers,reduction,featureData,zOffset1,zOffset2);  
-end
-%
-% Progress update
-clc
-fprintf('\n\nProgress: 75.0%%\n');
-fprintf('[>>>>>>>>>>>>>>>>>>------]\n');
-
-limit7 = int32(indexmax - indexmax/8);
-microTEMP = tallMicro(limit6:limit7,1:3);
-microTEMP = gather(microTEMP);
-microTEMP = microTEMP/reduction;
-
-zOffset1 = (tallMicro(limit6,1)/reduction)-1;
-zOffset1 = gather(zOffset1);
-zOffset2 = (tallMicro(limit7,1)/reduction)+1;
-zOffset2 = gather(zOffset2);
-featIDsTEMP = featIDs(:,:,zOffset1:zOffset2);
-GAOTEMP = GAO(:,:,:,:,zOffset1:zOffset2);
-% %%% ---------------------------------------------------------------------
-parfor index = limit6:limit7
-    [GNDarraySR(index,1),GNDarrayLR(index,1),misoriArray(index,1),GNDarraySS(index,:)] = ...
-        calcGND(index-limit6+1,microMax,featIDsTEMP,microTEMP,GAOTEMP,cs,indexmax,symOp,...
-        X_spacing,Y_spacing,Z_spacing,A,B,burgers,reduction,featureData,zOffset1,zOffset2);  
-end
-%
-% Progress update
-clc
-fprintf('\n\nProgress: 87.5%%\n');
-fprintf('[>>>>>>>>>>>>>>>>>>>>>---]\n');
-
-microTEMP = tallMicro(limit7:indexmax,1:3);
-microTEMP = gather(microTEMP);
-microTEMP = microTEMP/reduction;
-
-zOffset1 = (tallMicro(limit7,1)/reduction)-1;
-zOffset1 = gather(zOffset1);
-zOffset2 = (tallMicro(indexmax,1)/reduction)+1;
-zOffset2 = gather(zOffset2);
-featIDsTEMP = featIDs(:,:,zOffset1:zOffset2);
-GAOTEMP = GAO(:,:,:,:,zOffset1:zOffset2);
-% %%% ---------------------------------------------------------------------
-parfor index = limit7:indexmax
-    [GNDarraySR(index,1),GNDarrayLR(index,1),misoriArray(index,1),GNDarraySS(index,:)] = ...
-        calcGND(index-limit7+1,microMax,featIDsTEMP,microTEMP,GAOTEMP,cs,indexmax,symOp,...
-        X_spacing,Y_spacing,Z_spacing,A,B,burgers,reduction,featureData,zOffset1,zOffset2);   
-end
-
-% Progress update
-clc
-fprintf('\n\nProgress: 100%%\n');
-fprintf('[>>>>>>>>>>>>>>>>>>>>>>>>]\n');
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% ------------------------ END OF MAIN LOOP -------------------------------
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%
-% resolve GND array into spatially resolved material points for
-% visualization via .vtk output files
-
-fprintf('\n\nSaving Data...\n\n');
-
-GND_SR = zeros(microMax(3)+1,microMax(2)+1,microMax(1)+1);
-GND_LR = zeros(microMax(3)+1,microMax(2)+1,microMax(1)+1);
-GND_SS = zeros(microMax(3)+1,microMax(2)+1,microMax(1)+1,numSlip);
-
-if cs == 3 && numSlip == 33
-    GND_basal = zeros(microMax(3)+1,microMax(2)+1,microMax(1)+1);
-    GND_pris = zeros(microMax(3)+1,microMax(2)+1,microMax(1)+1);    
-    GND_pyr = zeros(microMax(3)+1,microMax(2)+1,microMax(1)+1);
-elseif cs == 2 && numSlip == 52
-    GND_s = zeros(microMax(3)+1,microMax(2)+1,microMax(1)+1);
-    GND_110 = zeros(microMax(3)+1,microMax(2)+1,microMax(1)+1);
-    GND_112 = zeros(microMax(3)+1,microMax(2)+1,microMax(1)+1);
-    GND_123 = zeros(microMax(3)+1,microMax(2)+1,microMax(1)+1);
-end
-
-microTEMP = tallMicro(:,:);
-microTEMP = gather(microTEMP);
-microTEMP(:,1:3) = microTEMP(:,1:3)/reduction;
-
-grainIDsTEMP = tallGrainIDs(:,1);
-grainIDsTEMP = gather(grainIDsTEMP);
-grainIDsTEMP = int32(grainIDsTEMP);
-
-for index = 1:indexmax
-    x = microTEMP(index,3)+1; %setting temp x coordinate
-    y = microTEMP(index,2)+1; %setting temp y coordinate
-    z = microTEMP(index,1)+1; %setting temp z coordinate
+for index in range(indexmax):
+    x = microTEMP[index, 2] + 1  #setting temp x coordinate
+    y = microTEMP[index, 1] + 1  #setting temp y coordinate
+    z = microTEMP[index, 0] + 1  #setting temp z coordinate
     
-    % locating spatially resolved GND density
-    GND_SR(x,y,z) = GNDarraySR(index,1);
+    # locating spatially resolved GND density
+    GND_SR[x, y, z] = GNDarraySR[index, 0]
     
-    % locating spatially resolved GND density
-    GND_SS(x,y,z,:) = GNDarraySS(index,:);
-    if cs == 3 && numSlip == 33
-        GND_basal(x,y,z) = sum(GNDarraySS(index,1:6));
-        GND_pris(x,y,z) = sum(GNDarraySS(index,1:3)) + sum(GNDarraySS(index,7:9));
-        GND_pyr(x,y,z) = sum(GNDarraySS(index,10:33));
-    elseif cs == 2 && numSlip == 52
-        GND_s(x,y,z) = sum(GNDarraySS(index,1:4));
-        GND_110(x,y,z) = sum(GNDarraySS(index,5:16));
-        GND_112(x,y,z) = sum(GNDarraySS(index,17:28));
-        GND_123(x,y,z) = sum(GNDarraySS(index,29:52));
-    end
+    # locating spatially resolved GND density
+    GND_SS[x, y, z, :] = GNDarraySS[index]
+    if cs == 3 & numSlip == 33:
+        GND_basal[x, y, z] = GNDarraySS[index].sum()
+        GND_pris[x, y, z] = GNDarraySS[index, :3].sum() + GNDarraySS[index, 6:9].sum()
+        GND_pyr[x, y, z] = GNDarraySS[index,9:33].sum()
+    elif cs == 2 & numSlip == 52:
+        GND_s[x, y, z] = GNDarraySS[index, :4].sum()
+        GND_110[x, y, z] = GNDarraySS[index, 4:16].sum()
+        GND_112[x, y, z] = GNDarraySS[index, 16:28].sum()
+        GND_123[x, y, z] = GNDarraySS[index, 28:].sum()
     
-    % locating spatially resolved GND density
-    %GND_LR(x,y,z) = GNDarrayLR(index,1);
-    
-    % locating spatially resolved misorientations
-    misori(x,y,z) = misoriArray(index,1);
-end
+    # locating spatially resolved misorientations
+    misori[x, y, z] = misoriArray[index, 0]
 
-% clear out data which lacks spatial resolution
-clear GNDarray misoriArray
-%
-%--------------------------------------------------------------------------
+#Save data for post-processing
+GNDtotOUTfilename = directory + ID + 'Data_output_GND_SR.txt'
+GNDtotOUTfilenameLR = directory + ID + 'Data_output_GND_LR.txt'
+GNDslipOUTfilename = directory + ID + 'Data_output_GNDslip.txt'
+np.savetxt(GNDtotOUTfilename, GND_SR, delimiter='\t', fmt='%1.5f')
+np.savetxt(GNDtotOUTfilenameLR, GND_LR, delimiter='\t', fmt='%1.5f')
+np.savetxt(GNDslipOUTfilename, GND_SS, delimiter='\t', fmt='%1.5f')
+
+if cs == 3 & numSlip == 33:
+    GNDslipOUTfilename = directory + ID + 'Data_output_GNDbasal_.txt'
+    GNDslipOUTfilename = directory + ID + 'Data_output_GNDpris_.txt'
+    GNDslipOUTfilename = directory + ID + 'Data_output_GNDpyr_.txt'
+    np.savetxt(GNDslipOUTfilename, GND_basal, delimiter='\t', fmt='%1.5f')
+    np.savetxt(GNDslipOUTfilename, GND_pris, delimiter='\t', fmt='%1.5f')
+    np.savetxt(GNDslipOUTfilename, GND_pyr, delimiter='\t', fmt='%1.5f')
+
+elif cs == 2 & numSlip == 52:
+    GNDslipOUTfilename = directory + ID + 'Data_output_GND_s_.txt'
+    GNDslipOUTfilename = directory + ID + 'Data_output_GND110_.txt'
+    GNDslipOUTfilename = directory + ID + 'Data_output_GND112_.txt'
+    GNDslipOUTfilename = directory + ID + 'Data_output_GND123_.txt'
+    np.savetxt(GNDslipOUTfilename, GND_s, delimiter='\t', fmt='%1.5f')
+    np.savetxt(GNDslipOUTfilename, GND_110, delimiter='\t', fmt='%1.5f')
+    np.savetxt(GNDslipOUTfilename, GND_112, delimiter='\t', fmt='%1.5f')
+    np.savetxt(GNDslipOUTfilename, GND_123, delimiter='\t', fmt='%1.5f')
+
+
+misoriOUTfilename = directory + ID + 'Data_output_misori_.txt'
+featOUTfilename = directory + ID + 'Data_output_featID_.txt'
+GAOOUTfilename = directory + ID + 'Data_output_GAO_.txt'
+np.savetxt(misoriOUTfilename, misori, delimiter='\t', fmt='%1.5f')
+np.savetxt(featOUTfilename, featIDs, delimiter='\t', fmt='%1.5f')
+np.savetxt(GAOOUTfilename, GAO, delimiter='\t', fmt='%1.5f')
+
+print('\n\nCalculation Complete\n\n')
+
+# barchart_ssGND

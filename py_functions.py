@@ -323,11 +323,15 @@ def L2_SparseV2(alpha, cs, A, B, burgers):
     return dd
 
 
-def GND(index, micro_max, featIDs, micro, GAO, cs, indexmax, symOp, X_spacing, Y_spacing, Z_spacing, A, B, burgers, featureData, zOffset1, zOffset2):
+def GND(index, micro_max, featIDs, micro, GAO, cs, indexmax, symOp, spacing, A, B, burgers, featureData):
+    # Define spacing
+    X_spacing = spacing[2]
+    Y_spacing = spacing[1]
+    Z_spacing = spacing[0]
     # Get coordinates
     x = micro[index, 2]  #setting x coordinate
     y = micro[index, 1]  #setting y coordinate
-    z = micro[index, 0] - zOffset1  #setting z coordinate
+    z = micro[index, 0]  #setting z coordinate
 
     # no calculations if inside void or outside microstructure
 
@@ -389,13 +393,14 @@ def import_data(data_path: str, grain_path: str):
     X_spacing = X_scaling * 10**-6  # in meters
     Y_spacing = Y_scaling * 10**-6
     Z_spacing = Z_scaling * 10**-6
+    spacing = np.array([Z_spacing, Y_spacing, X_spacing])
 
     micro[:, 2] = np.int32(micro[:, 2] / X_scaling)  # x
     micro[:, 1] = np.int32(micro[:, 1] / Y_scaling)  # y
     micro[:, 0] = np.int32(micro[:, 0] / Z_scaling)  # z
 
     # micro: 1st column: z, 2nd column: y, 3rd column: x, 4th column: phi1, 5th column: Phi, 6th column: phi2
-    return micro, GrainIDs, X_spacing, Y_spacing, Z_spacing, featureData
+    return micro, GrainIDs, spacing, featureData
 
 
 def symmetry_operators(cs):
