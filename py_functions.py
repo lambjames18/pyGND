@@ -31,15 +31,79 @@ def eu2om_mod(eu: np.ndarray):
     return q
 
 
+def symmetry_operators(cs):
+    # Symmetry operators used to determine the disorientation between two
+    # points
+
+    # global symOp
+
+    # define symmetry operators for cubic or hexagonal symmetries
+    if cs == 1 or cs == 2:
+        # there are 24 symmetry operators for cubic symmetries
+        # 576 (24 x 24) axis/angle pairs exist for any two cubic crystal lattices
+        sym1 =  np.array([[ 1,  0,  0], [ 0,  1,  0], [ 0,  0,  1]])
+        sym2 =  np.array([[ 0,  0,  1], [ 1,  0,  0], [ 0,  1,  0]])
+        sym3 =  np.array([[ 0,  1,  0], [ 0,  0,  1], [ 1,  0,  0]])
+        sym4 =  np.array([[ 0, -1,  0], [ 0,  0,  1], [-1,  0,  0]])
+        sym5 =  np.array([[ 0, -1,  0], [ 0,  0, -1], [ 1,  0,  0]])
+        sym6 =  np.array([[ 0,  1,  0], [ 0,  0, -1], [-1,  0,  0]])
+        sym7 =  np.array([[ 0,  0, -1], [ 1,  0,  0], [ 0, -1,  0]])
+        sym8 =  np.array([[ 0,  0, -1], [-1,  0,  0], [ 0,  1,  0]])
+        sym9 =  np.array([[ 0,  0,  1], [-1,  0,  0], [ 0, -1,  0]])
+        sym10 = np.array([[-1,  0,  0], [ 0,  1,  0], [ 0,  0, -1]])
+        sym11 = np.array([[-1,  0,  0], [ 0, -1,  0], [ 0,  0,  1]])
+        sym12 = np.array([[ 1,  0,  0], [ 0, -1,  0], [ 0,  0, -1]])
+        sym13 = np.array([[ 0,  0, -1], [ 0, -1,  0], [-1,  0,  0]])
+        sym14 = np.array([[ 0,  0,  1], [ 0, -1,  0], [ 1,  0,  0]])
+        sym15 = np.array([[ 0,  0,  1], [ 0,  1,  0], [-1,  0,  0]])
+        sym16 = np.array([[ 0,  0, -1], [ 0,  1,  0], [ 1,  0,  0]])
+        sym17 = np.array([[-1,  0,  0], [ 0,  0, -1], [ 0, -1,  0]])
+        sym18 = np.array([[ 1,  0,  0], [ 0,  0, -1], [ 0,  1,  0]])
+        sym19 = np.array([[ 1,  0,  0], [ 0,  0,  1], [ 0, -1,  0]])
+        sym20 = np.array([[-1,  0,  0], [ 0,  0,  1], [ 0,  1,  0]])
+        sym21 = np.array([[ 0, -1,  0], [-1,  0,  0], [ 0,  0, -1]])
+        sym22 = np.array([[ 0,  1,  0], [-1,  0,  0], [ 0,  0, -1]])
+        sym23 = np.array([[ 0,  1,  0], [ 1,  0,  0], [ 0,  0, -1]])
+        sym24 = np.array([[ 0, -1,  0], [ 1,  0,  0], [ 0,  0, -1]])
+        
+        symOp = np.dstack((sym1, sym2, sym3, sym4, sym5, sym6, sym7, sym8, sym9, sym10, sym11, sym12, sym13, sym14, sym15, sym16, sym17, sym18, sym19, sym20, sym21, sym22, sym23, sym24))
+        print(symOp.shape)
+        
+    elif cs == 3:
+        # there are 12 symmetry operators for hexagonal symmetries
+        # like A matrix for HCP, ortho-hexagonal coordinates
+        # 144 (12 x 12) axis/angle pairs exist for any two hexagonal lattices
+        a = np.sqrt(3)/2
+        
+        sym1 =  np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+        sym2 =  np.array([[-0.5, a, 0], [-a, -0.5, 0], [0, 0, 1]])
+        sym3 =  np.array([[-0.5, -a, 0], [a, -0.5, 0], [0, 0, 1]])
+        sym4 =  np.array([[0.5, a, 0], [-a, 0.5, 0], [0, 0, 1]])
+        sym5 =  np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]])
+        sym6 =  np.array([[0.5, -a, 0], [a, 0.5, 0], [0, 0, 1]])
+        sym7 =  np.array([[-0.5, -a, 0], [-a, 0.5, 0], [0, 0, -1]])
+        sym8 =  np.array([[1, 0, 0], [0, -1, 0], [0, 0, -1]])
+        sym9 =  np.array([[-0.5, a, 0], [a, 0.5, 0], [0, 0, -1]])
+        sym10 = np.array([[0.5, a, 0], [a, -0.5, 0], [0, 0, -1]])
+        sym11 = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]])
+        sym12 = np.array([[0.5, -a, 0], [-a, -0.5, 0], [0, 0, -1]])
+        
+        symOp = np.dstack((sym1, sym2, sym3, sym4, sym5, sym6, sym7, sym8, sym9, sym10, sym11, sym12))
+        print(symOp.shape)
+    else:
+        print('\nWarning! Crystal structure is not known. No symmetry operators have been defined.\n\n')
+    return symOp
+
+
 def xtal():
     """xtal
     decide which crystallography is relevant for material of interest
     includes burgers vector mag, linear operator B, or A matrix"""
 
-    cs = input('Input crystallography: \n 1: FCC \n 2: BCC \n 3: HCP\n\n')
+    cs = int(input('Input crystallography: \n 1: FCC \n 2: BCC \n 3: HCP\n\n'))
 
     # define burgers vector magnitude
-    burgers = input('Input Burgers Vector (A): \n2.86A for Tantalum BCC\n2.5A for IN718 & AlNiCo9\n2.95A for Ti\n\n')
+    burgers = float(input('Input Burgers Vector (A): \n2.86A for Tantalum BCC\n2.5A for IN718 & AlNiCo9\n2.95A for Ti\n\n'))
 
     # generate full A matrices
     A_bcc, checknorm = BCC_A_matrix_generationV2()
@@ -77,15 +141,15 @@ def xtal():
     # prompt user based on xtal selection
     if cs == 2:
         print('Include which slip modes?\n')
-        A_matrix_choice = input('1: screw + [110]\n2: screw + [112]\n3: screw + [123]\n4: screw + [110] + [112]\n5: screw + [110] + [112] + [123]\n')
+        A_matrix_choice = int(input('1: screw + [110]\n2: screw + [112]\n3: screw + [123]\n4: screw + [110] + [112]\n5: screw + [110] + [112] + [123]\n'))
         if A_matrix_choice == 1:
             a_bcc = np.float64(A_bcc[:, :16])
             numModes = 2
         elif A_matrix_choice == 2:
-            a_bcc = np.float64([A_bcc[:,:4], A_bcc[:,17:28]])
+            a_bcc = np.float64([A_bcc[:,:4], A_bcc[:,16:28]])
             numModes = 2
         elif A_matrix_choice == 3:
-            a_bcc = np.float64([A_bcc[:,:4], A_bcc[:,29:52]])
+            a_bcc = np.float64([A_bcc[:,:4], A_bcc[:,28:]])
             numModes = 2
         elif A_matrix_choice == 4:
             a_bcc = np.float64(A_bcc[:,:28])
@@ -96,12 +160,13 @@ def xtal():
         
         # 2.86A for Tantalum BCC
         # burgers = 2.86E-10;
-        A_sparse = sparse(a_bcc)
+        # A_sparse = sparse(a_bcc)
+        A_sparse = a_bcc
         numNye, numSlip = A_sparse.shape
         
     elif cs == 3:
         print('Include which slip modes? \n')
-        A_matrix_choice = input('1: basal\n2: basal + prismatic\n3: basal + prismatic + pyramidal(c+a)\n')
+        A_matrix_choice = int(input('1: basal\n2: basal + prismatic\n3: basal + prismatic + pyramidal(c+a)\n'))
         if A_matrix_choice == 1:
             A_hcp = np.array([d1, d2])
             numModes = 2
@@ -114,7 +179,8 @@ def xtal():
         
         # 0.295nm for Ti 
         # burgers = 2.95E-10;
-        A_sparse = sparse(A_hcp)
+        # A_sparse = sparse(A_hcp)
+        A_sparse = A_hcp
         numNye, numSlip = A_sparse.shape
         
     else:
@@ -122,12 +188,12 @@ def xtal():
 
         # .25nm, see by neutron diffraction via Zhang et. al.
         # burgers = 2.5E-10;
-        A_sparse = np.zeros(9,18) # dummy variable
+        A_sparse = np.zeros((9,18)) # dummy variable
         
         #defining number of slip systems and slip modes
         numSlip = 18
         numModes = 4
-    return 
+    return (burgers, A_sparse, numModes, cs)
 
 
 def BCC_A_matrix_generationV2():
@@ -202,64 +268,64 @@ def BCC_A_matrix_generationV2():
                                                      [1, -1,  0]]))
 
     # {112}<111> SLIP
-    nedge[13:25] = np.float32(1/np.sqrt(6) * np.array([[-2,  1, -1],
-                                                        [ 1, -2, -1],
-                                                        [ 1,  1,  2],
-                                                        [-2, -1, -1],
-                                                        [ 1,  2, -1],
-                                                        [ 1, -1,  2],
-                                                        [ 2,  1, -1],
-                                                        [-1, -2, -1],
-                                                        [-1,  1,  2],
-                                                        [ 2, -1, -1],
-                                                        [-1,  2, -1],
-                                                        [-1, -1,  2]]))
+    nedge[12:24] = np.float32(1/np.sqrt(6) * np.array([[-2,  1, -1],
+                                                       [ 1, -2, -1],
+                                                       [ 1,  1,  2],
+                                                       [-2, -1, -1],
+                                                       [ 1,  2, -1],
+                                                       [ 1, -1,  2],
+                                                       [ 2,  1, -1],
+                                                       [-1, -2, -1],
+                                                       [-1,  1,  2],
+                                                       [ 2, -1, -1],
+                                                       [-1,  2, -1],
+                                                       [-1, -1,  2]]))
 
     # {123}<111> SLIP
-    nedge[25:49] = np.float32(1/np.sqrt(14) * np.array([[ 1,  2,  3],     
-                                                        [-1,  3,  2],
-                                                        [ 2,  1,  3],
-                                                        [-2,  3,  1],
-                                                        [ 3, -1,  2],
-                                                        [ 3, -2,  1],
-                                                        [-1,  2, -3],
-                                                        [ 1,  3, -2],
-                                                        [ 2, -1,  3],
-                                                        [ 2,  3, -1],
-                                                        [ 3,  1,  2],
-                                                        [ 3,  2,  1],
-                                                        [ 1, -2, -3],
-                                                        [ 1,  3,  2],
-                                                        [ 2, -1, -3],
-                                                        [ 2,  3,  1],
-                                                        [ 3,  1, -2],
-                                                        [ 3,  2, -1],
-                                                        [ 1,  2, -3],
-                                                        [ 1, -3,  2],
-                                                        [ 2,  1, -3],
-                                                        [ 2, -3,  1],
-                                                        [-3,  1,  2],
-                                                        [-3,  2,  1]]))
+    nedge[24:] = np.float32(1/np.sqrt(14) * np.array([[ 1,  2,  3],     
+                                                      [-1,  3,  2],
+                                                      [ 2,  1,  3],
+                                                      [-2,  3,  1],
+                                                      [ 3, -1,  2],
+                                                      [ 3, -2,  1],
+                                                      [-1,  2, -3],
+                                                      [ 1,  3, -2],
+                                                      [ 2, -1,  3],
+                                                      [ 2,  3, -1],
+                                                      [ 3,  1,  2],
+                                                      [ 3,  2,  1],
+                                                      [ 1, -2, -3],
+                                                      [ 1,  3,  2],
+                                                      [ 2, -1, -3],
+                                                      [ 2,  3,  1],
+                                                      [ 3,  1, -2],
+                                                      [ 3,  2, -1],
+                                                      [ 1,  2, -3],
+                                                      [ 1, -3,  2],
+                                                      [ 2,  1, -3],
+                                                      [ 2, -3,  1],
+                                                      [-3,  1,  2],
+                                                      [-3,  2,  1]]))
 
     b = np.around(1/np.sqrt(3) * np.array([[1,  1, -1], [1, -1, -1], [1, -1,  1], [1,  1,  1]]), 4)
 
     tscrew = np.copy(b)
-    t = np.zeros(48,3)
+    t = np.zeros((48,3))
 
     # prepping dislocation dyads matrix
-    d = np.zeros(9,52)
+    d = np.zeros((9,52))
 
     # Calc Screw Dislocation Density
     for index in range(4):
-        d[1,index] = np.around(b[index, 1] * tscrew[index, 1], 8)
-        d[2,index] = np.around(b[index, 1] * tscrew[index, 2], 8)
-        d[3,index] = np.around(b[index, 1] * tscrew[index, 3], 8)
-        d[4,index] = np.around(b[index, 2] * tscrew[index, 1], 8)
-        d[5,index] = np.around(b[index, 2] * tscrew[index, 2], 8)
-        d[6,index] = np.around(b[index, 2] * tscrew[index, 3], 8)
-        d[7,index] = np.around(b[index, 3] * tscrew[index, 1], 8)
-        d[8,index] = np.around(b[index, 3] * tscrew[index, 2], 8)
-        d[9,index] = np.around(b[index, 3] * tscrew[index, 3], 8)
+        d[0,index] = np.around(b[index, 0] * tscrew[index, 0], 8)
+        d[1,index] = np.around(b[index, 0] * tscrew[index, 1], 8)
+        d[2,index] = np.around(b[index, 0] * tscrew[index, 2], 8)
+        d[3,index] = np.around(b[index, 1] * tscrew[index, 0], 8)
+        d[4,index] = np.around(b[index, 1] * tscrew[index, 1], 8)
+        d[5,index] = np.around(b[index, 1] * tscrew[index, 2], 8)
+        d[6,index] = np.around(b[index, 2] * tscrew[index, 0], 8)
+        d[7,index] = np.around(b[index, 2] * tscrew[index, 1], 8)
+        d[8,index] = np.around(b[index, 2] * tscrew[index, 2], 8)
 
     # Calc Edge Dislocation Density
     t[:12] = np.array([[-0.8165,  0.4082, -0.4082],
@@ -276,27 +342,24 @@ def BCC_A_matrix_generationV2():
                        [-0.4082, -0.4082,  0.8165]])
 
 
-    for index1 in range(13, t.shape[0]):
+    for index1 in range(12, t.shape[0]):
         t[index1] = np.float32(np.cross(nedge[index1],bedge[index1]))
 
     # Calculate Edge dislocation density
-    for index in range(5, d.shape[1]):
-        d[1, index] = bedge[index-4, 1] * t[index-4, 1]
-        d[2, index] = bedge[index-4, 1] * t[index-4, 2]
-        d[3, index] = bedge[index-4, 1] * t[index-4, 3]
-        d[4, index] = bedge[index-4, 2] * t[index-4, 1]
-        d[5, index] = bedge[index-4, 2] * t[index-4, 2]
-        d[6, index] = bedge[index-4, 2] * t[index-4, 3]
-        d[7, index] = bedge[index-4, 3] * t[index-4, 1]
-        d[8, index] = bedge[index-4, 3] * t[index-4, 2]
-        d[9, index] = bedge[index-4, 3] * t[index-4, 3]
+    for index in range(4, d.shape[1]):
+        d[0, index] = bedge[index-4, 0] * t[index-4, 0]
+        d[1, index] = bedge[index-4, 0] * t[index-4, 1]
+        d[2, index] = bedge[index-4, 0] * t[index-4, 2]
+        d[3, index] = bedge[index-4, 1] * t[index-4, 0]
+        d[4, index] = bedge[index-4, 1] * t[index-4, 1]
+        d[5, index] = bedge[index-4, 1] * t[index-4, 2]
+        d[6, index] = bedge[index-4, 2] * t[index-4, 0]
+        d[7, index] = bedge[index-4, 2] * t[index-4, 1]
+        d[8, index] = bedge[index-4, 2] * t[index-4, 2]
     
-    screws = d[:9, :4]
-    edges = d[:9, 5:]
-    a_bcc = np.array([np.around(screws,4), np.around(edges,6)])
-
-    A_bcc = np.float32(a_bcc)
-
+    screws = d[:, :4]
+    edges = d[:, 4:]
+    A_bcc = np.hstack((screws.astype(float), edges.astype(float)))
     checknorm = 1
 
     return A_bcc, checknorm
@@ -341,9 +404,9 @@ def HCP_A_matrix_mk3():
                                    [ 1, -1,  0, 1]]) 
                     
     # Conversion to [UVW] Miller Indices
-    bMillerBASAL = np.zeros(3,3)
-    nMillerBASAL = np.zeros(3,3)
-    tMillerBASAL = np.zeros(3,3)
+    bMillerBASAL = np.zeros((3,3))
+    nMillerBASAL = np.zeros((3,3))
+    tMillerBASAL = np.zeros((3,3))
 
     for index in range(3):
         u = bMBbasal[index, 0]
@@ -364,9 +427,9 @@ def HCP_A_matrix_mk3():
         nMillerBASAL[index, 1] = v - t
         nMillerBASAL[index, 2] = w
 
-    bMillerPRISMATIC = np.zeros(3,3)
-    nMillerPRISMATIC = np.zeros(3,3)
-    tMillerPRISMATIC = np.zeros(3,3)
+    bMillerPRISMATIC = np.zeros((3,3))
+    nMillerPRISMATIC = np.zeros((3,3))
+    tMillerPRISMATIC = np.zeros((3,3))
 
     for index in range(3):
         u = bMBprismatic[index, 0]
@@ -387,9 +450,9 @@ def HCP_A_matrix_mk3():
         nMillerPRISMATIC[index, 1] = v - t
         nMillerPRISMATIC[index, 2] = w
 
-    bMillerPYRAMIDALcplusa = np.zeros(12,3)
-    nMillerPYRAMIDALcplusa = np.zeros(12,3)
-    tMillerPYRAMIDALcplusa = np.zeros(12,3)
+    bMillerPYRAMIDALcplusa = np.zeros((12,3))
+    nMillerPYRAMIDALcplusa = np.zeros((12,3))
+    tMillerPYRAMIDALcplusa = np.zeros((12,3))
 
     for index in range(12):
         u = bMBpyramidalCplusA[index, 0]
@@ -419,47 +482,45 @@ def HCP_A_matrix_mk3():
         tMillerPYRAMIDALcplusa[index2] = np.cross(nMillerPYRAMIDALcplusa[index2], bMillerPYRAMIDALcplusa[index2])
 
     # --- normalize w/r to Miller coordinates
-    ###### Need to verify indices #######
     bMillerBASAL[0] = 1/np.sqrt(2) * bMillerBASAL[0]
     tMillerBASAL[0] = 1/np.sqrt(2) * tMillerBASAL[0]
 
-    bMillerPRISMATIC[3] = 1/np.sqrt(2) * bMillerPRISMATIC[3]
+    bMillerPRISMATIC[2] = 1/np.sqrt(2) * bMillerPRISMATIC[2]
     tMillerPRISMATIC = 1/2 *tMillerPRISMATIC
-    nMillerPRISMATIC[:3] = 1/np.sqrt(5) * nMillerPRISMATIC[:3]
-    nMillerPRISMATIC[3] = 1/np.sqrt(2) * nMillerPRISMATIC[3]
+    nMillerPRISMATIC[:2] = 1/np.sqrt(5) * nMillerPRISMATIC[:2]
+    nMillerPRISMATIC[2] = 1/np.sqrt(2) * nMillerPRISMATIC[2]
 
-    bMillerPYRAMIDALcplusa[:3] = 1/np.sqrt(2) * bMillerPYRAMIDALcplusa[:3]
-    bMillerPYRAMIDALcplusa[3] = 1/np.sqrt(3) * bMillerPYRAMIDALcplusa[3]
-    bMillerPYRAMIDALcplusa[4:8] = 1/np.sqrt(2) * bMillerPYRAMIDALcplusa[4:8]
-    bMillerPYRAMIDALcplusa[8:10] = 1/np.sqrt(3) * bMillerPYRAMIDALcplusa[8:10]
-    bMillerPYRAMIDALcplusa[10:] = 1/np.sqrt(2) * bMillerPYRAMIDALcplusa[10:]
+    bMillerPYRAMIDALcplusa[:2] = 1/np.sqrt(2) * bMillerPYRAMIDALcplusa[:2]
+    bMillerPYRAMIDALcplusa[2] = 1/np.sqrt(3) * bMillerPYRAMIDALcplusa[2]
+    bMillerPYRAMIDALcplusa[3:7] = 1/np.sqrt(2) * bMillerPYRAMIDALcplusa[3:7]
+    bMillerPYRAMIDALcplusa[7:9] = 1/np.sqrt(3) * bMillerPYRAMIDALcplusa[7:9]
+    bMillerPYRAMIDALcplusa[9:] = 1/np.sqrt(2) * bMillerPYRAMIDALcplusa[9:]
 
-    tMillerPYRAMIDALcplusa[0] = 1/np.sqrt(14) * tMillerPYRAMIDALcplusa[1]
-    tMillerPYRAMIDALcplusa[1] = 1/np.sqrt(11) * tMillerPYRAMIDALcplusa[2]
-    tMillerPYRAMIDALcplusa[2] = 1/np.sqrt(14) * tMillerPYRAMIDALcplusa[3]
-    tMillerPYRAMIDALcplusa[3] = 1/np.sqrt(11) * tMillerPYRAMIDALcplusa[4]
-    tMillerPYRAMIDALcplusa[4:6] = 1/np.sqrt(6) * tMillerPYRAMIDALcplusa[5:7]
-    tMillerPYRAMIDALcplusa[6] = 1/np.sqrt(11) * tMillerPYRAMIDALcplusa[7]
-    tMillerPYRAMIDALcplusa[7:9] = 1/np.sqrt(14) * tMillerPYRAMIDALcplusa[8:10]
-    tMillerPYRAMIDALcplusa[9] = 1/np.sqrt(11) * tMillerPYRAMIDALcplusa[10]
-    tMillerPYRAMIDALcplusa[10:] = 1/np.sqrt(6) * tMillerPYRAMIDALcplusa[11:]
+    tMillerPYRAMIDALcplusa[0] = 1/np.sqrt(14) * tMillerPYRAMIDALcplusa[0]
+    tMillerPYRAMIDALcplusa[1] = 1/np.sqrt(11) * tMillerPYRAMIDALcplusa[1]
+    tMillerPYRAMIDALcplusa[2] = 1/np.sqrt(14) * tMillerPYRAMIDALcplusa[2]
+    tMillerPYRAMIDALcplusa[3] = 1/np.sqrt(11) * tMillerPYRAMIDALcplusa[3]
+    tMillerPYRAMIDALcplusa[4:6] = 1/np.sqrt(6) * tMillerPYRAMIDALcplusa[4:6]
+    tMillerPYRAMIDALcplusa[6] = 1/np.sqrt(11) * tMillerPYRAMIDALcplusa[6]
+    tMillerPYRAMIDALcplusa[7:9] = 1/np.sqrt(14) * tMillerPYRAMIDALcplusa[7:9]
+    tMillerPYRAMIDALcplusa[9] = 1/np.sqrt(11) * tMillerPYRAMIDALcplusa[9]
+    tMillerPYRAMIDALcplusa[10:] = 1/np.sqrt(6) * tMillerPYRAMIDALcplusa[10:]
 
     nMillerPYRAMIDALcplusa[:4] = 1/np.sqrt(6) * nMillerPYRAMIDALcplusa[:4]
-    nMillerPYRAMIDALcplusa[4:6] = 1/np.sqrt(3) * nMillerPYRAMIDALcplusa[5:7]
-    nMillerPYRAMIDALcplusa[6:10] = 1/np.sqrt(6) * nMillerPYRAMIDALcplusa[7:11]
-    nMillerPYRAMIDALcplusa[10:] = 1/np.sqrt(3) * nMillerPYRAMIDALcplusa[11:]
-    ###### Need to verify indices #######
+    nMillerPYRAMIDALcplusa[4:6] = 1/np.sqrt(3) * nMillerPYRAMIDALcplusa[4:6]
+    nMillerPYRAMIDALcplusa[6:10] = 1/np.sqrt(6) * nMillerPYRAMIDALcplusa[6:10]
+    nMillerPYRAMIDALcplusa[10:] = 1/np.sqrt(3) * nMillerPYRAMIDALcplusa[10:]
 
     # determining tangent vectors for screw dislocations
     tMillerBASALscrew = bMillerBASAL
     tMillerPYRAMIDALcplusascrew = bMillerPYRAMIDALcplusa
 
     # prepping dislocation dyads matrix
-    d1 = np.zeros(9,3)
-    d2 = np.zeros(9,3)
-    d3 = np.zeros(9,3)
-    d4 = np.zeros(9,12)
-    d5 = np.zeros(9,12)
+    d1 = np.zeros((9,3))
+    d2 = np.zeros((9,3))
+    d3 = np.zeros((9,3))
+    d4 = np.zeros((9,12))
+    d5 = np.zeros((9,12))
 
     for index in range(3):
         d1[0, index] = bMillerBASAL[index, 0] * tMillerBASALscrew[index, 0]
@@ -516,3 +577,5 @@ def HCP_A_matrix_mk3():
     # -- from here, dislocation dyads are established and user will define slip
     # systems to contribute to A matrix
     return (d1, d2, d3, d4, d5)
+
+symmetry_operators(2)
