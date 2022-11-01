@@ -22,12 +22,10 @@ featIDs = np.squeeze(h["DataContainers/ImageDataContainer/CellData/FeatureIds"][
 euler = np.squeeze(h["DataContainers/ImageDataContainer/CellData/EulerAngles"][...])
 # Get xyz
 x1, x2, x3 = np.indices(featIDs.shape)
+coordinates = np.stack((x1, x2, x3), axis=-1)
+
 # Make microstructure
 # micro, GrainIDs, spacing = pf.import_data()
-
-micro_max = np.array([x1.max(), x2.max(), x3.max()])  # provides the maximum x, y, z values
-micro_min = np.array([x1.min(), x2.min(), x3.min()])  # provides the minimum x, y, z values
-indexmax = featIDs.size  # provides the number of entries
 
 # preallocate multidimensional arrays
 dd = np.zeros(numSlip)
@@ -48,22 +46,18 @@ misori  = np.zeros(featIDs.shape)
 # Create orientation matrix for each point
 print("Creating orientation matrices...")
 GAO = pf.eu2om_multi(euler)
-print(GAO.shape)
 
 # create array for total GND density at each material point
-GNDarraySR = np.zeros(indexmax)
-GNDarrayLR = np.zeros(indexmax)
-GNDarraySS = np.zeros((indexmax, numSlip))
+GNDarraySR = np.zeros(featIDs.size)
+GNDarrayLR = np.zeros(featIDs.size)
+GNDarraySS = np.zeros((featIDs.size, numSlip))
 
 # create array for avg misorientation at each material point
-misoriArray = np.zeros(indexmax)
+misoriArray = np.zeros(featIDs.size)
 
-    
 # uncomment line for GNDs across GB 
 # RESULTS IN LOSS OF FEATURE DATA
-#featIDs(x,y,z) = 1;
-
-exit()
+# featIDs[:, :, :] = 1
 
 ###########################################################################
 # ---------------------- START OF MAIN LOOP -------------------------------
@@ -71,28 +65,28 @@ exit()
 # misorientations ---------------------------------------------------------
 ###########################################################################
 
-# make sure workstation is ready for parallel processing. Determine number-
-# of workers needed for calculation. Prallalelization is only via parfor --
-# loops. Multiple parfor loops occur sequentially to report progress w/o --
-# impacting performance of parallel processing. ---------------------------
-#
+print("Converting arrays to 1D...")
+# convert arrays to 1D
+# featIDs = featIDs.reshape(-1)
+# euler = euler.reshape(-1, 3)
+# GAO = GAO.reshape(3, 3, -1)
 # Indicate start of GND computation 
 print('\n\nStarting parallel computations....\n\n')
-for index in range(micro.shape[0]):
-    GNDarraySR, GNDarrayLR, misoriArray, GNDarraySS = pf.GND(index,
-                                                             micro_max,
-                                                             featIDs,
-                                                             micro,
-                                                             GAO,
-                                                             cs,
-                                                             indexmax,
-                                                             symOp,
-                                                             spacing,
-                                                             A,
-                                                             B,
-                                                             burgers)
+# for index in range(euler.shape[0]):
+for i in range(featIDs.shape[0]):
+    for j in range(featIDs.shape[1]):
+        for k in range(featIDs.shape[2]):
+            point_coords = coordinates[i, j, k]
+            GND_SR, misori, GND_SS = pf.GND(point_coords, featIDs, GAO, cs, symOp, spacing, A, B, burgers)
+            print(GND_SR.shape, GND_SR)
+            print(misori.shape, misori)
+            print(GND_SS.shape, GND_SS)
+            exit()
 
 
+
+
+exit()
 
 ###########################################################################
 # ------------------------ END OF MAIN LOOP -------------------------------

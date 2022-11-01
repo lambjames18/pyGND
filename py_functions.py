@@ -14,7 +14,6 @@ def eu2om_multi(eu: np.ndarray):
     om = np.array([[c1*c3-s1*c2*s3,  s1*c3+c1*c2*s3, s2*s3],
                   [-c1*s3-s1*c2*c3, -s1*s3+c1*c2*c3, s2*c3],
                   [s1*s2, -c1*s2, c2]])
-    print(om.shape)
     om = np.where(np.abs(om) < thr, 0.0, om)
     return om.reshape((3, 3) + vol_shape)
 
@@ -50,22 +49,22 @@ def eu2om_mod(eu: np.ndarray):
     return q
 
 
-def determine_neighborhood(index, micro_max, micro, featIDs):
-    #global microMax featIDs micro
-    x1 = micro[index, 2]  #setting x coordinate
-    x2 = micro[index, 1]  #setting y coordinate
-    x3 = micro[index, 0]  #setting z coordinate
-
-    print("DETERMINE NEIGHBORHOOD FUNCTION NEEDS TO VERIFY IF STATEMENT INDICE CONDITIONS")
+def determine_neighborhood(featIDs, x1, x2, x3):
     # checking completeness of the voxel neighborhood in x dimension
+
+    # if the voxel is on the edge of the microstructure
     if x1 == 0:
         XenvCompleteness = 'forward'
-    elif x1 == micro_max[0, 0] + 1:
+    # if the voxel is on the other edge of the microstructure
+    elif x1 == featIDs.shape[0] - 1:
         XenvCompleteness = 'backward'
+    # if the voxel is on the edge of a grain
     elif featIDs[x1, x2, x3] == featIDs[x1+1, x2, x3] & featIDs[x1, x2, x3] != featIDs[x1-1, x2, x3]:
         XenvCompleteness = 'forward'
+    # if the voxel is on the other edge of a grain
     elif featIDs[x1, x2, x3] != featIDs[x1+1, x2, x3] & featIDs[x1, x2, x3] == featIDs[x1-1, x2, x3]:
         XenvCompleteness = 'backward'
+    # if the voxel is somewhere in the middle of a grain
     elif featIDs[x1, x2, x3] == featIDs[x1+1, x2, x3] & featIDs[x1, x2, x3] == featIDs[x1-1, x2, x3]:
         XenvCompleteness = 'central'
     else:
@@ -73,14 +72,19 @@ def determine_neighborhood(index, micro_max, micro, featIDs):
 
     # checking completeness of the voxel neighborhood in y dimension    
 
+    # if the voxel is on the edge of the microstructure
     if x2 == 0:
         YenvCompleteness = 'forward'
-    elif x2 == micro_max[0, 1] + 1:
+    # if the voxel is on the other edge of the microstructure
+    elif x2 == featIDs.shape[1] - 1:
         YenvCompleteness = 'backward'
+    # if the voxel is on the edge of a grain
     elif featIDs[x1, x2, x3] == featIDs[x1, x2+1, x3] & featIDs[x1, x2, x3] != featIDs[x1, x2-1, x3]:
         YenvCompleteness = 'forward'
+    # if the voxel is on the other edge of a grain
     elif featIDs[x1, x2, x3] != featIDs[x1, x2+1, x3] & featIDs[x1, x2, x3] == featIDs[x1, x2-1, x3]:
         YenvCompleteness = 'backward'
+    # if the voxel is somewhere in the middle of a grain
     elif featIDs[x1, x2, x3] == featIDs[x1, x2+1, x3] & featIDs[x1, x2, x3] == featIDs[x1, x2-1, x3]:
         YenvCompleteness = 'central'
     else:
@@ -88,14 +92,19 @@ def determine_neighborhood(index, micro_max, micro, featIDs):
 
     # checking completeness of the voxel neighborhood in z dimension 
 
+    # if the voxel is on the edge of the microstructure
     if x3 == 0:
         ZenvCompleteness = 'forward'
-    elif x3 == micro_max[0, 2] + 1:
+    # if the voxel is on the other edge of the microstructure
+    elif x3 == featIDs.shape[2] - 1:
         ZenvCompleteness = 'backward'
+    # if the voxel is on the edge of a grain
     elif featIDs[x1, x2, x3] == featIDs[x1, x2, x3+1] & featIDs[x1, x2, x3] != featIDs[x1, x2, x3-1]:
         ZenvCompleteness = 'forward'
+    # if the voxel is on the other edge of a grain
     elif featIDs[x1, x2, x3] != featIDs[x1, x2, x3+1] & featIDs[x1, x2, x3] == featIDs[x1, x2, x3-1]:
         ZenvCompleteness = 'backward'
+    # if the voxel is somewhere in the middle of a grain
     elif featIDs[x1, x2, x3] == featIDs[x1, x2, x3+1] & featIDs[x1, x2, x3] == featIDs[x1, x2, x3-1]:
         ZenvCompleteness = 'central'
     else:
@@ -106,26 +115,34 @@ def determine_neighborhood(index, micro_max, micro, featIDs):
 
 def deltathetakV4(gA, gB, k, symOp):
     # determine how many symmetry cases to evaluate
-    numSym = symOp.shape[0]
+    numSym = symOp.shape
 
     # preallocate number of unique misorientations to calc so disorientation
     # can be found
-    misori_matrix = np.zeros(numSym[0, 2]**2)
+    misori_matrix = np.zeros(numSym[2]**2)
 
     # preallocate iterators
-    gA_iter = 1
-    gB_iter = 1
+    gA_iter = 0
+    gB_iter = 0
 
     # if material points have same orientation, ignore this process
-    if gB != gA:
+    if (gB != gA).any():
         # lines 17-37 correspond to misorientation calc with ori matrices
         for delg_iter in range(misori_matrix.shape[0]):
+            print(delg_iter)
             gA_temp = symOp[:, :, gA_iter] * gA * symOp[:, :, gA_iter].T
             gB_temp = symOp[:, :, gB_iter] * gB * symOp[:, :, gB_iter].T
             delg = gB_temp / gA_temp
+            delg = np.where(gB_temp == 0., 0., delg)
             
             # calculate delta theta, skip trace(delg) function for speed
-            deltheta = np.acos((np.diag(delg).sum() - 1) / 2)
+            print("gB_temp", gB_temp)
+            print("gA_temp", gA_temp)
+            print("delg", delg)
+            print("diag", np.diag(delg))
+            print("sum", np.diag(delg).sum(), "\n")
+            deltheta = np.arccos((np.diag(delg).sum() - 1) / 2)
+            # print(deltheta)
             
             if deltheta == 0:
                 misori_matrix[delg_iter] = 0
@@ -140,11 +157,11 @@ def deltathetakV4(gA, gB, k, symOp):
 
             # storing misorientation with specific symmetry operator applied
 
-            if gB_iter == numSym[0, 2]:
-                gB_iter = 1
-                gA_iter = gA_iter + 1
+            if gB_iter == numSym[2] - 1:
+                gB_iter = 0
+                gA_iter += 1
             else:
-                gB_iter = gB_iter + 1
+                gB_iter += 1
 
         # finding lowest value of misorientation (disorientation)
         d_col = np.argmin(np.abs(misori_matrix))
@@ -274,25 +291,25 @@ def determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x1
     return dthe, diffOperatorX, diffOperatorY, diffOperatorZ
 
 
-def determine_kappaV5(dthe, diffOperatorX, diffOperatorY, diffOperatorZ, X_spacing, Y_spacing, Z_spacing):
+def determine_kappaV5(dthe, diffOperatorX, diffOperatorY, diffOperatorZ, spacing):
     # kappa must be calculated for material point
     #----------------------------------------------------------------------
     kappa = np.zeros((3, 3))
 
     # Calc three kappa components for x direction
-    kappa[0, 0] = dthe[0,0] / (diffOperatorX * X_spacing)
-    kappa[1, 0] = dthe[1,0] / (diffOperatorX * X_spacing)
-    kappa[2, 0] = dthe[2,0] / (diffOperatorX * X_spacing)
+    kappa[0, 0] = dthe[0,0] / (diffOperatorX * spacing[0])
+    kappa[1, 0] = dthe[1,0] / (diffOperatorX * spacing[0])
+    kappa[2, 0] = dthe[2,0] / (diffOperatorX * spacing[0])
 
     # Calc three kappas for y direction
-    kappa[0, 1] = dthe[0,1] / (diffOperatorY * Y_spacing)
-    kappa[1, 1] = dthe[1,1] / (diffOperatorY * Y_spacing)
-    kappa[2, 1] = dthe[2,1] / (diffOperatorY * Y_spacing)
+    kappa[0, 1] = dthe[0,1] / (diffOperatorY * spacing[1])
+    kappa[1, 1] = dthe[1,1] / (diffOperatorY * spacing[1])
+    kappa[2, 1] = dthe[2,1] / (diffOperatorY * spacing[1])
         
     # Calc three kappas for z direction                    
-    kappa[0, 2] = dthe[0, 2] / (diffOperatorZ * Z_spacing)
-    kappa[1, 2] = dthe[1, 2] / (diffOperatorZ * Z_spacing)
-    kappa[2, 2] = dthe[2, 2] / (diffOperatorZ * Z_spacing)
+    kappa[0, 2] = dthe[0, 2] / (diffOperatorZ * spacing[2])
+    kappa[1, 2] = dthe[1, 2] / (diffOperatorZ * spacing[2])
+    kappa[2, 2] = dthe[2, 2] / (diffOperatorZ * spacing[2])
     #----------------------------------------------------------------------
     return kappa
 
@@ -308,15 +325,15 @@ def L2_SparseV2(alpha, cs, A, B, burgers):
 
     # Nye tensor must be converted into array form Lambda
     #----------------------------------------------------------------------
-    Lambda = np.array([alpha(1,1),
-                       alpha(1,2),
-                       alpha(1,3),
-                       alpha(2,1),
-                       alpha(2,2),
-                       alpha(2,3),
-                       alpha(3,1),
-                       alpha(3,2),
-                       alpha(3,3)])
+    Lambda = np.array([alpha[0,0],
+                       alpha[0,1],
+                       alpha[0,2],
+                       alpha[1,0],
+                       alpha[1,1],
+                       alpha[1,2],
+                       alpha[2,0],
+                       alpha[2,1],
+                       alpha[2,2]])
 
     if cs == 2 | cs == 3:
         # two steps to solve via minimize‖Ax−b‖2
@@ -341,31 +358,33 @@ def L2_SparseV2(alpha, cs, A, B, burgers):
     #-----------------------------------------------------------------------
     return dd
 
+# Loop over all points in the volume
+# Need to have coordinates of point and be able to grab neighboring coordinates
+# Need orientation matrix for each point
+# Need to be able to grab neighboring orientation matrices
+# Need to be able to grab neighboring featIDs
 
-def GND(index, micro_max, featIDs, micro, GAO, cs, indexmax, symOp, spacing, A, B, burgers):
-    # Define spacing
-    X_spacing = spacing[2]
-    Y_spacing = spacing[1]
-    Z_spacing = spacing[0]
-    # Get coordinates
-    x1 = micro[index, 0].astype(int)  #setting z coordinate
-    x2 = micro[index, 1].astype(int)  #setting y coordinate
-    x3 = micro[index, 2].astype(int)  #setting x coordinate
+def GND(coords, featIDs, GAO, cs, symOp, spacing, A, B, burgers):
+    # Get coordinates of current point
+    x1 = coords[0].astype(int)
+    x2 = coords[1].astype(int)
+    x3 = coords[2].astype(int)
 
     # no calculations if inside void or outside microstructure
-
     if GAO[:, :, x1, x2, x3].sum() != 0:
+        # Determine what neighborhood the point has
+        # Returns forward, backward, central, or constant for the three directions
+        XenvCompleteness, YenvCompleteness, ZenvCompleteness = determine_neighborhood(featIDs, x1, x2, x3)
 
-        XenvCompleteness, YenvCompleteness, ZenvCompleteness = determine_neighborhood(index, micro_max, micro, featIDs)
-
-        # Determine Disorientation between material points and neighbors,
-        # influenced by neighborhood -- Calculate kappa for material points
+        # Determine Disorientation between material points and neighbors, influenced by neighborhood
+        # Calculate kappa for material points
+        # Returns
         dthe, diffOperatorX, diffOperatorY, diffOperatorZ = determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x1, x2, x3, symOp)
 
         # Calculate average misorientation from dthe
         avg_misori = np.mean(np.abs(dthe))
 
-        kappaSR = determine_kappaV5(dthe, diffOperatorX, diffOperatorY, diffOperatorZ, X_spacing, Y_spacing, Z_spacing)
+        kappaSR = determine_kappaV5(dthe, diffOperatorX, diffOperatorY, diffOperatorZ, spacing)
         
         # Convert Kappa to crystal coordinates since dislocations are
         # described in crystal coordinates
@@ -386,16 +405,17 @@ def GND(index, micro_max, featIDs, micro, GAO, cs, indexmax, symOp, spacing, A, 
         
         # repeat misorientation calculations using LR approach
         # it is just zero (not sure why, but it was commented out in original code)
-        totalGNDdensityLR = 0
+        # totalGNDdensityLR = 0
     else:
         # tame output for voxels where misorientation can't be calc
-        avgMisori = 0
+        avg_misori = 0
         totalGNDdensitySR = 0
-        totalGNDdensityLR = 0
+        # totalGNDdensityLR = 0
         ddSR_dim = A.shape[1]
         ddSR = np.zeros((1,ddSR_dim))
 
-    return totalGNDdensitySR, totalGNDdensityLR, avgMisori, ddSR
+    # return totalGNDdensitySR, totalGNDdensityLR, avgMisori, ddSR
+    return totalGNDdensitySR, avg_misori, ddSR
 
 
 def import_data(data_path: str, grain_path: str):
