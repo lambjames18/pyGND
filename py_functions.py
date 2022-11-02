@@ -126,21 +126,22 @@ def deltathetakV4(gA, gB, k, symOp):
     gB_iter = 0
 
     # if material points have same orientation, ignore this process
-    if (gB != gA).any():
+    if (gB != gA).any() and gA.sum() != 0:
         # lines 17-37 correspond to misorientation calc with ori matrices
         for delg_iter in range(misori_matrix.shape[0]):
-            print(delg_iter)
-            gA_temp = symOp[:, :, gA_iter] * gA * symOp[:, :, gA_iter].T
-            gB_temp = symOp[:, :, gB_iter] * gB * symOp[:, :, gB_iter].T
-            delg = gB_temp / gA_temp
-            delg = np.where(gB_temp == 0., 0., delg)
+            # print(delg_iter)
+            gA_temp = symOp[:, :, gA_iter].dot(gA.dot(symOp[:, :, gA_iter].T))
+            gB_temp = symOp[:, :, gB_iter].dot(gB.dot(symOp[:, :, gB_iter].T))
+            # delg = gB_temp / gA_temp
+            delg = np.linalg.solve(gA_temp.conj().T, gB_temp.conj().T).conj().T
+            # delg = np.where(gB_temp == 0., 0., delg)
             
             # calculate delta theta, skip trace(delg) function for speed
-            print("gB_temp", gB_temp)
-            print("gA_temp", gA_temp)
-            print("delg", delg)
-            print("diag", np.diag(delg))
-            print("sum", np.diag(delg).sum(), "\n")
+            # print("gB_temp", gB_temp)
+            # print("gA_temp", gA_temp)
+            # print("delg", delg)
+            # print("diag", np.diag(delg))
+            # print("sum", np.diag(delg).sum(), "\n")
             deltheta = np.arccos((np.diag(delg).sum() - 1) / 2)
             # print(deltheta)
             
@@ -151,7 +152,7 @@ def deltathetakV4(gA, gB, k, symOp):
             elif k == 2:
                 misori_matrix[delg_iter] = -(delg[2, 0] - delg[0, 2]) * (deltheta/(2*np.sin(deltheta)))
             elif k == 3:
-                misori_matrix[delg_iter] = -(delg[0,1] - delg[1,0]) * (deltheta/(2*np.sin(deltheta)))
+                misori_matrix[delg_iter] = -(delg[0, 1] - delg[1, 0]) * (deltheta/(2*np.sin(deltheta)))
             else:
                 misori_matrix[delg_iter] = 0
 
@@ -167,7 +168,7 @@ def deltathetakV4(gA, gB, k, symOp):
         d_col = np.argmin(np.abs(misori_matrix))
 
         # return disorientation
-        disori = misori_matrix[d_col]
+        disori = np.abs(misori_matrix[d_col])
     else:
         disori = 0
 
@@ -182,24 +183,25 @@ def determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x1
     # orientation matrix of material point
     gA = GAO[:, :, x1, x2, x3]
 
+    print("X")
     # switch statement evaluating expression for x environment
     if XenvCompleteness == 'backward':
         gE = GAO[:, :, x1-1, x2, x3]  #setting Euler Angle at x - 1
         # First Nearest Neighbors 1st order backward difference----
         diffOperatorX = 1
         # calc specific miorientation angles for kappa calc
-        dthe[0, 0] = deltathetakV4(gE, gA, 0, symOp)
-        dthe[1, 0] = deltathetakV4(gE, gA, 1, symOp)
-        dthe[2, 0] = deltathetakV4(gE, gA, 2, symOp)
+        dthe[0, 0] = deltathetakV4(gE, gA, 1, symOp)
+        dthe[1, 0] = deltathetakV4(gE, gA, 2, symOp)
+        dthe[2, 0] = deltathetakV4(gE, gA, 3, symOp)
         
     elif XenvCompleteness ==  'forward':
         gB = GAO[:, :, x1+1, x2, x3]  #setting Euler Angle at x + 1
         # First Nearest Neighbors 1st order forward difference-----
         diffOperatorX = 1
         # calc specific miorientation angles for kappa calc
-        dthe[0, 0] = deltathetakV4(gA, gB, 0, symOp)
-        dthe[1, 0] = deltathetakV4(gA, gB, 1, symOp)
-        dthe[2, 0] = deltathetakV4(gA, gB, 2, symOp)
+        dthe[0, 0] = deltathetakV4(gA, gB, 1, symOp)
+        dthe[1, 0] = deltathetakV4(gA, gB, 2, symOp)
+        dthe[2, 0] = deltathetakV4(gA, gB, 3, symOp)
         
     elif XenvCompleteness == 'central':
         gB = GAO[:, :, x1+1, x2, x3]  #setting Euler Angle at x + 1
@@ -207,9 +209,9 @@ def determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x1
         # central finite difference
         diffOperatorX = 2
         # calc specific miorientation angles for kappa calc
-        dthe[0, 0] = deltathetakV4(gE, gB, 0, symOp)
-        dthe[1, 0] = deltathetakV4(gE, gB, 1, symOp)
-        dthe[2, 0] = deltathetakV4(gE, gB, 2, symOp)
+        dthe[0, 0] = deltathetakV4(gE, gB, 1, symOp)
+        dthe[1, 0] = deltathetakV4(gE, gB, 2, symOp)
+        dthe[2, 0] = deltathetakV4(gE, gB, 3, symOp)
         
     elif XenvCompleteness ==  'constant':
         # in case no misorientation present
@@ -218,24 +220,25 @@ def determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x1
         dthe[1, 0] = 0
         dthe[2, 0] = 0
 
+    print("Y")
     # switch statement evaluating expression for y environment
     if YenvCompleteness == 'backward':
         gF = GAO[:, :, x1, x2-1, x3]  #setting Euler Angle at y - 1
         # First Nearest Neighbors 1st order backward difference----
         diffOperatorY = 1
         # calc specific miorientation angles for kappa calc
-        dthe[0, 1] = deltathetakV4(gF, gA, 0, symOp)
-        dthe[1, 1] = deltathetakV4(gF, gA, 1, symOp)
-        dthe[2, 1] = deltathetakV4(gF, gA, 2, symOp)
+        dthe[0, 1] = deltathetakV4(gF, gA, 1, symOp)
+        dthe[1, 1] = deltathetakV4(gF, gA, 2, symOp)
+        dthe[2, 1] = deltathetakV4(gF, gA, 3, symOp)
         
     elif YenvCompleteness == 'forward':
         gC = GAO[:, :, x1, x2+1, x3]  #setting Euler Angle at y + 1
         # First Nearest Neighbors 1st order forward difference----
         diffOperatorY = 1
         # calc specific miorientation angles for kappa calc
-        dthe[0, 1] = deltathetakV4(gA, gC, 0, symOp)
-        dthe[1, 1] = deltathetakV4(gA, gC, 1, symOp)
-        dthe[2, 1] = deltathetakV4(gA, gC, 2, symOp)
+        dthe[0, 1] = deltathetakV4(gA, gC, 1, symOp)
+        dthe[1, 1] = deltathetakV4(gA, gC, 2, symOp)
+        dthe[2, 1] = deltathetakV4(gA, gC, 3, symOp)
         
     elif YenvCompleteness == 'central':
         gC = GAO[:, :, x1, x2+1, x3]  #setting Euler Angle at y + 1
@@ -243,9 +246,9 @@ def determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x1
         # central finite difference
         diffOperatorY = 2
         # calc specific miorientation angles for kappa calc
-        dthe[0, 1] = deltathetakV4(gF, gC, 0, symOp)
-        dthe[1, 1] = deltathetakV4(gF, gC, 1, symOp)
-        dthe[2, 1] = deltathetakV4(gF, gC, 2, symOp)
+        dthe[0, 1] = deltathetakV4(gF, gC, 1, symOp)
+        dthe[1, 1] = deltathetakV4(gF, gC, 2, symOp)
+        dthe[2, 1] = deltathetakV4(gF, gC, 3, symOp)
         
     elif YenvCompleteness ==  'constant':
         # in case no misorientation, or no neighbor
@@ -254,33 +257,34 @@ def determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x1
         dthe[1, 1] = 0
         dthe[2, 1] = 0
 
+    print("Z")
     # switch statement evaluating expression for environment
     if ZenvCompleteness == 'backward':
         gG = GAO[:, :, x1, x2, x3-1]  #setting Euler Angle at z - 1
         # First Nearest Neighbors 1st order backward difference----
         diffOperatorZ = 1
         # calc specific miorientation angles for kappa calc
-        dthe[0,2] = deltathetakV4(gG, gA, 0, symOp)
-        dthe[1,2] = deltathetakV4(gG, gA, 1, symOp)
-        dthe[2,2] = deltathetakV4(gG, gA, 2, symOp)
+        dthe[0,2] = deltathetakV4(gG, gA, 1, symOp)
+        dthe[1,2] = deltathetakV4(gG, gA, 2, symOp)
+        dthe[2,2] = deltathetakV4(gG, gA, 3, symOp)
         
     elif ZenvCompleteness == 'forward':
         gD = GAO[:, :, x1, x2, x3+1]  #setting Euler Angle at z + 1
         # First Nearest Neighbors 1st order forward difference-----
         diffOperatorZ = 1
         # calc specific miorientation angles for kappa calc
-        dthe[0, 2] = deltathetakV4(gA, gD, 0, symOp)
-        dthe[1, 2] = deltathetakV4(gA, gD, 1, symOp)
-        dthe[2, 2] = deltathetakV4(gA, gD, 2, symOp)
+        dthe[0, 2] = deltathetakV4(gA, gD, 1, symOp)
+        dthe[1, 2] = deltathetakV4(gA, gD, 2, symOp)
+        dthe[2, 2] = deltathetakV4(gA, gD, 3, symOp)
         
     elif ZenvCompleteness == 'central':
         gD = GAO[:, :, x1, x2, x3+1]  #setting Euler Angle at z + 1
         gG = GAO[:, :, x1, x2, x3-1]  #setting Euler Angle at z - 1
         diffOperatorZ = 2
         # calc specific miorientation angles for kappa calc
-        dthe[0, 2] = deltathetakV4(gG, gD, 0, symOp)
-        dthe[1, 2] = deltathetakV4(gG, gD, 1, symOp)
-        dthe[2, 2] = deltathetakV4(gG, gD, 2, symOp)
+        dthe[0, 2] = deltathetakV4(gG, gD, 1, symOp)
+        dthe[1, 2] = deltathetakV4(gG, gD, 2, symOp)
+        dthe[2, 2] = deltathetakV4(gG, gD, 3, symOp)
         
     elif ZenvCompleteness == 'constant':
         # zero misorientation along axis if no neighbor
@@ -338,8 +342,8 @@ def L2_SparseV2(alpha, cs, A, B, burgers):
     if cs == 2 | cs == 3:
         # two steps to solve via minimize‖Ax−b‖2
         #[c,R] = qr(transpose(A_sparse),transpose(Lambda))
-        B = A.T * np.linalg.inv(A * A.T)
-        dd = B * Lambda
+        B = A.T.dot(np.linalg.inv(A * A.T))
+        dd = B.dot(Lambda)
         numSlip = A.shape[1]
         # calc dislocation density (rho) using burgers vector
         if numSlip > 9 & cs == 3:
@@ -352,7 +356,7 @@ def L2_SparseV2(alpha, cs, A, B, burgers):
 
     else:
         # explicitly solve for FCC dislocation density with linear operator
-        dd = B*Lambda
+        dd = B.dot(Lambda)
         # calc dislocation density (rho) using burgers vector
         dd = dd/burgers
     #-----------------------------------------------------------------------
@@ -380,15 +384,17 @@ def GND(coords, featIDs, GAO, cs, symOp, spacing, A, B, burgers):
         # Calculate kappa for material points
         # Returns
         dthe, diffOperatorX, diffOperatorY, diffOperatorZ = determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x1, x2, x3, symOp)
+        print("dthe\n",dthe)
 
         # Calculate average misorientation from dthe
         avg_misori = np.mean(np.abs(dthe))
 
         kappaSR = determine_kappaV5(dthe, diffOperatorX, diffOperatorY, diffOperatorZ, spacing)
+        print("kappaSR\n",kappaSR)
         
         # Convert Kappa to crystal coordinates since dislocations are
         # described in crystal coordinates
-        kappaSRprime = GAO[:, :, x1, x2, x3].T * kappaSR * GAO[:, :, x1, x2, x3]
+        kappaSRprime = GAO[:, :, x1, x2, x3].T.dot(kappaSR.dot(GAO[:, :, x1, x2, x3]))
         
         # Calculate Nye Tensor (alpha) from curvature kappa  
         alphaSR = kappaSRprime.T - np.trace(kappaSRprime)
@@ -508,10 +514,12 @@ def xtal():
     decide which crystallography is relevant for material of interest
     includes burgers vector mag, linear operator B, or A matrix"""
 
-    cs = int(input('Input crystallography: \n 1: FCC \n 2: BCC \n 3: HCP\n\n'))
+    # cs = int(input('Input crystallography: \n 1: FCC \n 2: BCC \n 3: HCP\n\n'))
+    cs = 1
 
     # define burgers vector magnitude
-    burgers = float(input('Input Burgers Vector (A): \n2.86A for Tantalum BCC\n2.5A for IN718 & AlNiCo9\n2.95A for Ti\n\n'))
+    # burgers = float(input('Input Burgers Vector (A): \n2.86A for Tantalum BCC\n2.5A for IN718 & AlNiCo9\n2.95A for Ti\n\n'))
+    burgers = 2.5
 
     # generate full A matrices
     A_bcc, checknorm = BCC_A_matrix_generationV2()

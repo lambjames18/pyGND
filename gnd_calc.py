@@ -73,16 +73,19 @@ print("Converting arrays to 1D...")
 # Indicate start of GND computation 
 print('\n\nStarting parallel computations....\n\n')
 # for index in range(euler.shape[0]):
+
+count = 1
 for i in range(featIDs.shape[0]):
     for j in range(featIDs.shape[1]):
         for k in range(featIDs.shape[2]):
-            point_coords = coordinates[i, j, k]
-            GND_SR, misori, GND_SS = pf.GND(point_coords, featIDs, GAO, cs, symOp, spacing, A, B, burgers)
-            print(GND_SR.shape, GND_SR)
-            print(misori.shape, misori)
-            print(GND_SS.shape, GND_SS)
-            exit()
-
+            if count == 100:
+                point_coords = coordinates[i, j, k]
+                print(i, j, k)
+                print("GAO\n", GAO[:, :, i, j, k])
+                GND_SR, misori, GND_SS = pf.GND(point_coords, featIDs, GAO, cs, symOp, spacing, A, B, burgers)
+            else:
+                pass
+            count += 1
 
 
 

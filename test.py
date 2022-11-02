@@ -1,6 +1,10 @@
 import numpy as np
 
-data = np.zeros((5, 5, 5))
+for i in range(10):
+    for j in range(20):
+        for k in range(30):
+            print(i, j, k)
+            if i == 1 and j == 2 and k == 3:
+                break
 
-x, y, z = np.indices(data.shape)
-xyz0 = np.hstack((x, y, z))
+print("Broke")
