@@ -14,8 +14,8 @@
 %filenameIDs = '//192.168.0.201/data/MATLAB_common/GND_Matlab/r2_3pct_Feature1_IDs_zyx-eulersFZ_wholedata.csv';
 %filenameData = '//192.168.0.201/data/MATLAB_common/GND_Matlab/SpallTaFeature1_zyx-eulersFZ_wholedata.csv';
 %filenameIDs = '//192.168.0.201/data/MATLAB_common/GND_Matlab/SpallTaFeature1_IDs_zyx-eulersFZ_wholedata.csv';
-filenameData = '//192.168.0.201/data/MATLAB_common/GND_Matlab/Spall_AM_TaFeature1_zyx-eulersFZ_wholedata.csv';
-filenameIDs = '//192.168.0.201/data/MATLAB_common/GND_Matlab/Spall_AM_TaFeature1_IDs_zyx-eulersFZ_wholedata.csv';
+%filenameData = '//192.168.0.201/data/MATLAB_common/GND_Matlab/Spall_AM_TaFeature1_zyx-eulersFZ_wholedata.csv';
+%filenameIDs = '//192.168.0.201/data/MATLAB_common/GND_Matlab/Spall_AM_TaFeature1_IDs_zyx-eulersFZ_wholedata.csv';
 %filenameData = 'Ti73pctFeature1_zyx-eulersFZ_wholedata.csv';
 %filenameIDs = 'Ti73pctFeature1_IDs_zyx-eulersFZ_wholedata.csv';
 %filenameData = 'Ti71pctFeature1_zyx-eulersFZ_wholedata.csv';
@@ -27,6 +27,8 @@ filenameIDs = '//192.168.0.201/data/MATLAB_common/GND_Matlab/Spall_AM_TaFeature1
 %filenameIDs = 'Bicrystal2Feature1_IDs_zyx-eulersFZ_wholedata.csv';
 %filenameIDs = 'synth16_Feature1_IDs_zyx-eulersFZ_wholedata.csv';
 %filenameData = 'synth16_Feature1_zyx-eulersFZ_wholedata.csv';
+filenameIDs = 'R2S10S5_GrainIDs.csv';
+filenameData = 'R2S10S5_Data.csv';
 
 %filenameFeatData = '//192.168.0.102/general/MATLAB_common/GND_Matlab/CoNi16_FZ_featuredata.csv';
 %Directory = 'D:/IMMI Work/Final_output/1pct_r15_addtl_2pct/';
@@ -40,9 +42,9 @@ featureData = 0;
 GrainIDs = datastore(filenameIDs);
 %GrainIDs = ;
 
-X_scaling = 1.5;
-Y_scaling = 1.5;
-Z_scaling = 1.5;
+X_scaling = 0.5;
+Y_scaling = 0.5;
+Z_scaling = 0.5;
 
 % if resolution of TriBeam data was adjusted
 reduction = 1; 
@@ -55,9 +57,12 @@ Z_spacing = Z_scaling*(10^(-6))*reduction;
 %fullMicro = table2array(fullMicro);
 tallMicro = tall(micro);
 tallMicro = table2array(tallMicro);
-tallMicro(:,3) = int32(tallMicro(:,3)/X_scaling);
-tallMicro(:,2) = int32(tallMicro(:,2)/Y_scaling);
-tallMicro(:,1) = int32(tallMicro(:,1)/Z_scaling);
+%tallMicro(:,3) = int32(tallMicro(:,3)/X_scaling);
+%tallMicro(:,2) = int32(tallMicro(:,2)/Y_scaling);
+%tallMicro(:,1) = int32(tallMicro(:,1)/Z_scaling);
+tallMicro(:,3) = int32(tallMicro(:,3));
+tallMicro(:,2) = int32(tallMicro(:,2));
+tallMicro(:,1) = int32(tallMicro(:,1));
 
 %fullGrainIDs = readall(GrainIDs);
 tallGrainIDs = tall(GrainIDs);

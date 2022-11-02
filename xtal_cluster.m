@@ -4,14 +4,14 @@
 
 %cs = input('Input crystallography: \n 1: FCC \n 2: BCC \n 3: HCP\n\n');
 fprintf('Input crystallography:\n')
-cs = 2
+cs = 1;
 
 %define burgers vector magnitude
 %burgers = input(['Input Burgers Vector (A): \n2.86A for Tantalum BCC'...
 %    '\n2.5A for IN718 & AlNiCo9\n2.95A for Ti'...
 %    '\n   A for CoNi\n\n']);
 fprintf('Burgers (A):\n')
-burgers = 2.86
+burgers = 2.5;
 
 % generate full A matrices
 BCC_A_matrix_generationV2

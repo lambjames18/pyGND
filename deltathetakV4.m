@@ -27,8 +27,8 @@ if sum(comp,'all') ~= 9 && sum(gA,'all') ~= 0
 
     % lines 17-37 correspond to misorientation calc with ori matrices
     for delg_iter = 1:(numSym(1,3)^2)
-        gA_temp = symOp(:,:,gA_iter)*gA;
-        gB_temp = symOp(:,:,gB_iter)*gB;
+        gA_temp = symOp(:,:,gA_iter)*gA*transpose(symOp(:,:,gA_iter));
+        gB_temp = symOp(:,:,gB_iter)*gB*transpose(symOp(:,:,gB_iter));
         delg = gB_temp/gA_temp;
         
         % calculate delta theta, skip trace(delg) function for speed
