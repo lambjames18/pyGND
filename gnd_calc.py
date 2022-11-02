@@ -78,7 +78,7 @@ count = 1
 for i in range(featIDs.shape[0]):
     for j in range(featIDs.shape[1]):
         for k in range(featIDs.shape[2]):
-            if count == 100:
+            if count == 200:
                 point_coords = coordinates[i, j, k]
                 GND_SR, misori, GND_SS = pf.GND(point_coords, featIDs, GAO, cs, symOp, spacing, A, B, burgers)
             else:

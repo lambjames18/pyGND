@@ -375,25 +375,20 @@ def GND(coords, featIDs, GAO, cs, symOp, spacing, A, B, burgers):
         
         # Convert Kappa to crystal coordinates since dislocations are
         # described in crystal coordinates
-        kappaSRprime = GAO[:, :, x1, x2, x3].T.dot(kappaSR.dot(GAO[:, :, x1, x2, x3]))
-        print("kappaSRprime\n",kappaSRprime)
+        kappaSRprime = GAO[:, :, x1, x2, x3].T.dot(kappaSR[:, ::-1]).dot(GAO[:, :, x1, x2, x3])
         
         # Calculate Nye Tensor (alpha) from curvature kappa  
         alphaSR = kappaSRprime.T - np.trace(kappaSRprime)
-        print("alphaSR\n",alphaSR)
 
         #function used to determine a total value of gnd density at one particular material point
 
         # determine dislocation densities (dd -> rho) from misorientations
         ddSR = L2_SparseV2(alphaSR, cs, A, B, burgers)
-        print("ddSR\n",ddSR)
 
         # determine total gnd density to be sum of dislocation density across all
         # slip systems
         totalGNDdensitySR = np.abs(ddSR).sum()
         ddSR = np.abs(ddSR).T
-        print("totalGNDdensitySR\n",totalGNDdensitySR)
-        print("ddSR\n",ddSR)
         
         # repeat misorientation calculations using LR approach
         # it is just zero (not sure why, but it was commented out in original code)

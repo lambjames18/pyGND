@@ -1,10 +1,7 @@
 import numpy as np
 
-for i in range(10):
-    for j in range(20):
-        for k in range(30):
-            print(i, j, k)
-            if i == 1 and j == 2 and k == 3:
-                break
+a = np.array([[1,2,3], [2,3,4], [5,6,7]])
+b = np.array([[3,2,1], [4,3,2], [7,6,5]])
 
-print("Broke")
+print(a.T.dot(b).dot(a))
+print(a.T.dot(b))
