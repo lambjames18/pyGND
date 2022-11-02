@@ -17,7 +17,7 @@ symOp = pf.symmetry_operators(cs)
 
 # Read data
 h = h5py.File("D:/Research/R2_Sample10-Shot5/Data/3D/R2S10S5.dream3d")
-spacing = np.squeeze(h["DataContainers/ImageDataContainer/_SIMPL_GEOMETRY/SPACING"][...])
+spacing = np.squeeze(h["DataContainers/ImageDataContainer/_SIMPL_GEOMETRY/SPACING"][...]) * 1e-6
 featIDs = np.squeeze(h["DataContainers/ImageDataContainer/CellData/FeatureIds"][...])
 euler = np.squeeze(h["DataContainers/ImageDataContainer/CellData/EulerAngles"][...])
 # Get xyz
@@ -80,8 +80,6 @@ for i in range(featIDs.shape[0]):
         for k in range(featIDs.shape[2]):
             if count == 100:
                 point_coords = coordinates[i, j, k]
-                print(i, j, k)
-                print("GAO\n", GAO[:, :, i, j, k])
                 GND_SR, misori, GND_SS = pf.GND(point_coords, featIDs, GAO, cs, symOp, spacing, A, B, burgers)
             else:
                 pass

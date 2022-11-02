@@ -129,21 +129,13 @@ def deltathetakV4(gA, gB, k, symOp):
     if (gB != gA).any() and gA.sum() != 0:
         # lines 17-37 correspond to misorientation calc with ori matrices
         for delg_iter in range(misori_matrix.shape[0]):
-            # print(delg_iter)
             gA_temp = symOp[:, :, gA_iter].dot(gA.dot(symOp[:, :, gA_iter].T))
             gB_temp = symOp[:, :, gB_iter].dot(gB.dot(symOp[:, :, gB_iter].T))
             # delg = gB_temp / gA_temp
             delg = np.linalg.solve(gA_temp.conj().T, gB_temp.conj().T).conj().T
-            # delg = np.where(gB_temp == 0., 0., delg)
             
             # calculate delta theta, skip trace(delg) function for speed
-            # print("gB_temp", gB_temp)
-            # print("gA_temp", gA_temp)
-            # print("delg", delg)
-            # print("diag", np.diag(delg))
-            # print("sum", np.diag(delg).sum(), "\n")
             deltheta = np.arccos((np.diag(delg).sum() - 1) / 2)
-            # print(deltheta)
             
             if deltheta == 0:
                 misori_matrix[delg_iter] = 0
@@ -183,7 +175,6 @@ def determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x1
     # orientation matrix of material point
     gA = GAO[:, :, x1, x2, x3]
 
-    print("X")
     # switch statement evaluating expression for x environment
     if XenvCompleteness == 'backward':
         gE = GAO[:, :, x1-1, x2, x3]  #setting Euler Angle at x - 1
@@ -220,7 +211,6 @@ def determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x1
         dthe[1, 0] = 0
         dthe[2, 0] = 0
 
-    print("Y")
     # switch statement evaluating expression for y environment
     if YenvCompleteness == 'backward':
         gF = GAO[:, :, x1, x2-1, x3]  #setting Euler Angle at y - 1
@@ -257,7 +247,6 @@ def determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x1
         dthe[1, 1] = 0
         dthe[2, 1] = 0
 
-    print("Z")
     # switch statement evaluating expression for environment
     if ZenvCompleteness == 'backward':
         gG = GAO[:, :, x1, x2, x3-1]  #setting Euler Angle at z - 1
@@ -301,19 +290,13 @@ def determine_kappaV5(dthe, diffOperatorX, diffOperatorY, diffOperatorZ, spacing
     kappa = np.zeros((3, 3))
 
     # Calc three kappa components for x direction
-    kappa[0, 0] = dthe[0,0] / (diffOperatorX * spacing[0])
-    kappa[1, 0] = dthe[1,0] / (diffOperatorX * spacing[0])
-    kappa[2, 0] = dthe[2,0] / (diffOperatorX * spacing[0])
+    kappa[:, 0] = dthe[:, 0] / (diffOperatorX * spacing[0])
 
     # Calc three kappas for y direction
-    kappa[0, 1] = dthe[0,1] / (diffOperatorY * spacing[1])
-    kappa[1, 1] = dthe[1,1] / (diffOperatorY * spacing[1])
-    kappa[2, 1] = dthe[2,1] / (diffOperatorY * spacing[1])
+    kappa[:, 1] = dthe[:,1] / (diffOperatorY * spacing[1])
         
     # Calc three kappas for z direction                    
-    kappa[0, 2] = dthe[0, 2] / (diffOperatorZ * spacing[2])
-    kappa[1, 2] = dthe[1, 2] / (diffOperatorZ * spacing[2])
-    kappa[2, 2] = dthe[2, 2] / (diffOperatorZ * spacing[2])
+    kappa[:, 2] = dthe[:, 2] / (diffOperatorZ * spacing[2])
     #----------------------------------------------------------------------
     return kappa
 
@@ -384,30 +367,33 @@ def GND(coords, featIDs, GAO, cs, symOp, spacing, A, B, burgers):
         # Calculate kappa for material points
         # Returns
         dthe, diffOperatorX, diffOperatorY, diffOperatorZ = determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x1, x2, x3, symOp)
-        print("dthe\n",dthe)
 
         # Calculate average misorientation from dthe
         avg_misori = np.mean(np.abs(dthe))
 
         kappaSR = determine_kappaV5(dthe, diffOperatorX, diffOperatorY, diffOperatorZ, spacing)
-        print("kappaSR\n",kappaSR)
         
         # Convert Kappa to crystal coordinates since dislocations are
         # described in crystal coordinates
         kappaSRprime = GAO[:, :, x1, x2, x3].T.dot(kappaSR.dot(GAO[:, :, x1, x2, x3]))
+        print("kappaSRprime\n",kappaSRprime)
         
         # Calculate Nye Tensor (alpha) from curvature kappa  
         alphaSR = kappaSRprime.T - np.trace(kappaSRprime)
+        print("alphaSR\n",alphaSR)
 
         #function used to determine a total value of gnd density at one particular material point
 
         # determine dislocation densities (dd -> rho) from misorientations
         ddSR = L2_SparseV2(alphaSR, cs, A, B, burgers)
+        print("ddSR\n",ddSR)
 
         # determine total gnd density to be sum of dislocation density across all
         # slip systems
         totalGNDdensitySR = np.abs(ddSR).sum()
         ddSR = np.abs(ddSR).T
+        print("totalGNDdensitySR\n",totalGNDdensitySR)
+        print("ddSR\n",ddSR)
         
         # repeat misorientation calculations using LR approach
         # it is just zero (not sure why, but it was commented out in original code)
