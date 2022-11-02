@@ -1,5 +1,6 @@
 import numpy as np
 import h5py
+from rich.progress import track
 
 import py_functions as pf
 
@@ -65,27 +66,24 @@ misoriArray = np.zeros(featIDs.size)
 # misorientations ---------------------------------------------------------
 ###########################################################################
 
-print("Converting arrays to 1D...")
-# convert arrays to 1D
-# featIDs = featIDs.reshape(-1)
-# euler = euler.reshape(-1, 3)
-# GAO = GAO.reshape(3, 3, -1)
+GND_SR = np.zeros(featIDs.shape, dtype=float)
+GND_SS = np.zeros(featIDs.shape + (numSlip,), dtype=float)
+misori = np.zeros(featIDs.shape, dtype=float)
+
 # Indicate start of GND computation 
 print('\n\nStarting parallel computations....\n\n')
 # for index in range(euler.shape[0]):
-
-count = 1
+print(featIDs.shape)
 for i in range(featIDs.shape[0]):
     for j in range(featIDs.shape[1]):
-        for k in range(featIDs.shape[2]):
-            if count == 200:
-                point_coords = coordinates[i, j, k]
-                GND_SR, misori, GND_SS = pf.GND(point_coords, featIDs, GAO, cs, symOp, spacing, A, B, burgers)
-            else:
-                pass
-            count += 1
+        for k in track(range(featIDs.shape[2]), "Looping over x3"):
+            point_coords = coordinates[i, j, k]
+            GND_SR[i, j, k], misori[i, j, k], GND_SS[i, j, k] = pf.GND(point_coords, featIDs, GAO, cs, symOp, spacing, A, B, burgers)
 
-
+print("Complete")
+np.save(directory + ID + "_GND_SR.npy", GND_SR)
+np.save(directory + ID + "_GND_SS.npy", GND_SS)
+np.save(directory + ID + "_misori.npy", misori)
 
 exit()
 

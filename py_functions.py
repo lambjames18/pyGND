@@ -375,7 +375,7 @@ def GND(coords, featIDs, GAO, cs, symOp, spacing, A, B, burgers):
         
         # Convert Kappa to crystal coordinates since dislocations are
         # described in crystal coordinates
-        kappaSRprime = GAO[:, :, x1, x2, x3].T.dot(kappaSR[:, ::-1]).dot(GAO[:, :, x1, x2, x3])
+        kappaSRprime = GAO[:, :, x1, x2, x3].T.dot(kappaSR).dot(GAO[:, :, x1, x2, x3])
         
         # Calculate Nye Tensor (alpha) from curvature kappa  
         alphaSR = kappaSRprime.T - np.trace(kappaSRprime)
