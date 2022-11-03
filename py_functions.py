@@ -284,20 +284,18 @@ def determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x1
     return dthe, diffOperatorX, diffOperatorY, diffOperatorZ
 
 
-def determine_kappaV5(dthe, diffOperatorX, diffOperatorY, diffOperatorZ, spacing):
+def determine_kappaV5(dthe, diffOperators, spacing):
     # kappa must be calculated for material point
     #----------------------------------------------------------------------
-    kappa = np.zeros((3, 3))
-
+    # kappa = np.zeros((3, 3))
     # Calc three kappa components for x direction
-    kappa[:, 0] = dthe[:, 0] / (diffOperatorX * spacing[0])
-
+    # kappa[:, 0] = dthe[:, 0] / (diffOperatorX * spacing[0])
     # Calc three kappas for y direction
-    kappa[:, 1] = dthe[:,1] / (diffOperatorY * spacing[1])
-        
+    # kappa[:, 1] = dthe[:,1] / (diffOperatorY * spacing[1])
     # Calc three kappas for z direction                    
-    kappa[:, 2] = dthe[:, 2] / (diffOperatorZ * spacing[2])
+    # kappa[:, 2] = dthe[:, 2] / (diffOperatorZ * spacing[2])
     #----------------------------------------------------------------------
+    kappa = dthe / (diffOperators * spacing)
     return kappa
 
 
@@ -371,7 +369,9 @@ def GND(coords, featIDs, GAO, cs, symOp, spacing, A, B, burgers):
         # Calculate average misorientation from dthe
         avg_misori = np.mean(np.abs(dthe))
 
-        kappaSR = determine_kappaV5(dthe, diffOperatorX, diffOperatorY, diffOperatorZ, spacing)
+        # kappaSR = determine_kappaV5(dthe, diffOperatorX, diffOperatorY, diffOperatorZ, spacing)
+        diffOperators = np.array([diffOperatorX, diffOperatorY, diffOperatorZ])
+        kappaSR = determine_kappaV5(dthe, diffOperators, spacing)
         
         # Convert Kappa to crystal coordinates since dislocations are
         # described in crystal coordinates
