@@ -1,0 +1,60 @@
+import matplotlib.pyplot as plt
+import numpy as np
+import h5py
+import mpire
+
+import py_functions as pf
+import GND
+
+directory = "./output_data/"
+# Name output file
+ID = "R2S10S5"
+
+# Convert Burgers to m
+burgers = 2.5
+cs = 1
+
+# Read data
+h = h5py.File("D:/Research/R2_Sample10-Shot5/Data/3D/R2S10S5.dream3d")
+spacing = np.squeeze(h["DataContainers/ImageDataContainer/_SIMPL_GEOMETRY/SPACING"][...]) * 1e-6
+featIDs = np.squeeze(h["DataContainers/ImageDataContainer/CellData/FeatureIds"][...])
+euler = np.squeeze(h["DataContainers/ImageDataContainer/CellData/EulerAngles"][...])
+# h.close()
+full_shape = featIDs.shape
+
+# Remove planes with no grains
+slice_x1 = slice(None, 447)
+slice_x2 = slice(26, 374)
+slice_x3 = slice(25, None)
+featIDs = featIDs[slice_x1, slice_x2, slice_x3]
+euler = euler[slice_x1, slice_x2, slice_x3]
+
+# Get xyz
+x1, x2, x3 = np.indices(featIDs.shape)
+coordinates = np.stack((x1, x2, x3), axis=-1)
+coordinates = coordinates.reshape(-1, 3)
+
+if __name__ == '__main__':
+    gnd = GND.GND(cs, burgers)
+    gnd.set_data(coordinates, euler, featIDs, spacing)
+    coords = list(coordinates)
+    with mpire.WorkerPool(n_jobs=8) as pool:
+        results = pool.map(gnd.compute, coords, progress_bar=True, max_tasks_active=9)
+
+    print("Calculation complete. Unpacking results...")
+    gnd.unpack_data(results)
+    
+    # Make the data 3D again, first by creating a 3D array of zeros
+    gnd_sr = np.zeros(full_shape, dtype=np.float32)
+    gnd_misori = np.zeros(full_shape, dtype=np.float32)
+    gnd_ss = np.zeros(full_shape + (gnd.GND_SS.shape[-1],), dtype=np.float32)
+    # Now pack in the data, accounting for the slices
+    gnd_sr[slice_x1, slice_x2, slice_x3] = gnd.GND_SR
+    gnd_misori[slice_x1, slice_x2, slice_x3] = gnd.misori
+    gnd_ss[slice_x1, slice_x2, slice_x3] = gnd.GND_SS
+        
+    print("Saving data.")
+    np.save(directory + ID + "_GND_SR.npy", gnd_sr)
+    np.save(directory + ID + "_misori.npy", gnd_misori)
+    np.save(directory + ID + "_GND_SS.npy", gnd_ss)
+    print("Complete")

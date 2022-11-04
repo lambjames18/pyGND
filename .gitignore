@@ -1,1 +1,5 @@
 __pycache__/py_functions.cpython-311.pyc
+*.pyc
+*.npy
+*.csv
+__pycache__/py_functions.cpython-310.pyc

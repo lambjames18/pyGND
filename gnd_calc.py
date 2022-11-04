@@ -1,8 +1,9 @@
 import numpy as np
 import h5py
-from rich.progress import track
+import mpire
 
 import py_functions as pf
+import GND
 
 directory = "./test/"
 # Name output file
@@ -24,41 +25,21 @@ euler = np.squeeze(h["DataContainers/ImageDataContainer/CellData/EulerAngles"][.
 # Get xyz
 x1, x2, x3 = np.indices(featIDs.shape)
 coordinates = np.stack((x1, x2, x3), axis=-1)
-
-# Make microstructure
-# micro, GrainIDs, spacing = pf.import_data()
-
-# preallocate multidimensional arrays
-dd = np.zeros(numSlip)
-
-# create multidimensional arrays for Euler Angles and Feature IDs
-# uses the maximum spacial dimensions to create the arrays
-# phi1 = np.zeros((micro_max[0]+1, micro_max[1]+1, micro_max[2]+1))  # shape (x_length, y_length, z_length)
-# Phi  = np.zeros((micro_max[0]+1, micro_max[1]+1, micro_max[2]+1))  # shape (x_length, y_length, z_length)
-# phi2 = np.zeros((micro_max[0]+1, micro_max[1]+1, micro_max[2]+1))  # shape (x_length, y_length, z_length)
-# featIDs = np.zeros((micro_max[0]+1, micro_max[1]+1, micro_max[2]+1))  # shape (x_length, y_length, z_length)
-# misori = np.zeros((micro_max[0]+1, micro_max[1]+1, micro_max[2]+1))  # shape (x_length, y_length, z_length)
-# GAO  = np.zeros((3, 3, micro_max[2]+1, micro_max[1]+1, micro_max[0]+1))  # shape (3, 3, x_length, y_length, z_length)
-phi1 = euler[:, :, :, 0]
-Phi = euler[:, :, :, 1]
-phi2 = euler[:, :, :, 2]
-misori  = np.zeros(featIDs.shape)
+coordinates = coordinates.reshape(-1, 3)
 
 # Create orientation matrix for each point
 print("Creating orientation matrices...")
 GAO = pf.eu2om_multi(euler)
 
-# create array for total GND density at each material point
-GNDarraySR = np.zeros(featIDs.size)
-GNDarrayLR = np.zeros(featIDs.size)
-GNDarraySS = np.zeros((featIDs.size, numSlip))
-
-# create array for avg misorientation at each material point
-misoriArray = np.zeros(featIDs.size)
-
 # uncomment line for GNDs across GB 
 # RESULTS IN LOSS OF FEATURE DATA
 # featIDs[:, :, :] = 1
+
+# Create empty arrays to store results
+GND_SR = np.zeros(featIDs.size, dtype=float)
+GND_SS = np.zeros((featIDs.size, numSlip), dtype=float)
+misori = np.zeros(featIDs.size, dtype=float)
+
 
 ###########################################################################
 # ---------------------- START OF MAIN LOOP -------------------------------
@@ -66,20 +47,19 @@ misoriArray = np.zeros(featIDs.size)
 # misorientations ---------------------------------------------------------
 ###########################################################################
 
-GND_SR = np.zeros(featIDs.shape, dtype=float)
-GND_SS = np.zeros(featIDs.shape + (numSlip,), dtype=float)
-misori = np.zeros(featIDs.shape, dtype=float)
-
 # Indicate start of GND computation 
 print('\n\nStarting parallel computations....\n\n')
-# for index in range(euler.shape[0]):
-print(featIDs.shape)
-for i in range(featIDs.shape[0]):
-    for j in range(featIDs.shape[1]):
-        for k in track(range(featIDs.shape[2]), "Looping over x3"):
-            point_coords = coordinates[i, j, k]
-            GND_SR[i, j, k], misori[i, j, k], GND_SS[i, j, k] = pf.GND(point_coords, featIDs, GAO, cs, symOp, spacing, A, B, burgers)
 
+
+gnd = GND.GND(cs, burgers / 1e-10)
+gnd.set_data(coordinates, euler, featIDs, spacing)
+
+exit()
+for i in track(range(coordinates.shape[0]), "Working on GNDs..."):
+    point_coords = coordinates[i]
+    GND_SR[i], misori[i], GND_SS[i] = pf.GND(point_coords, featIDs, GAO, cs, symOp, spacing, A, B, burgers)
+
+exit()
 print("Complete")
 np.save(directory + ID + "_GND_SR.npy", GND_SR)
 np.save(directory + ID + "_GND_SS.npy", GND_SS)

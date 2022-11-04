@@ -103,6 +103,8 @@ if (GAOTEMP(:,:,x,y,z) ~= zeros(3))
     % influenced by neighborhood -- Calculate kappa for material points              
     [dthe,diffOperatorX,diffOperatorY,diffOperatorZ] = determine_dthe(...
         XenvCompleteness,YenvCompleteness,ZenvCompleteness,GAOTEMP,x,y,z,symOp);
+    fprintf("\n\ndthe\n");
+    fprintf("%f\n", dthe);
 
     % Calculate average misorientation from dthe
     % mean(abs(dthe),'all') appears too recent for use with 2018a on cluster
@@ -113,13 +115,13 @@ if (GAOTEMP(:,:,x,y,z) ~= zeros(3))
 
     kappaSR = determine_kappaV5(dthe,diffOperatorX,...
         diffOperatorY,diffOperatorZ,X_spacing,Y_spacing,Z_spacing);
+    fprintf("\n\nKappaSR\n");
+    fprintf("%f\n", kappaSR);
     
     % Convert Kappa to crystal coordinates since dislocations are
     % described in crystal coordinates
     kappaSRprime = transpose(GAOTEMP(:,:,x,y,z))*kappaSR*GAOTEMP(:,:,x,y,z);
     %kappaSRprime = kappaSR;
-    fprintf("\n\nKappaSR\n");
-    fprintf("%f\n", kappaSR);
     fprintf("\n\nGAO.T\n");
     fprintf("%f\n", transpose(GAOTEMP(:,:,x,y,z)));
     fprintf("\n\nGAO\n");

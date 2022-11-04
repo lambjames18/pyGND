@@ -11,15 +11,17 @@ def eu2om_multi(eu: np.ndarray):
     phi2 = eu_flat[:, 2]
     c1, c2, c3 = np.cos(phi1), np.cos(Phi), np.cos(phi2)
     s1, s2, s3 = np.sin(phi1), np.sin(Phi), np.sin(phi2)
-    om = np.array([[c1*c3-s1*c2*s3,  s1*c3+c1*c2*s3, s2*s3],
-                  [-c1*s3-s1*c2*c3, -s1*s3+c1*c2*c3, s2*c3],
-                  [s1*s2, -c1*s2, c2]])
+    # ZXZ convention, passive rotation
+    om = np.array([[ c1*c3-c2*s1*s3, c3*s1+c1*c2*s3, s3*s2],
+                   [-c1*s3-c2*c3*s1, c1*c2*c3-s1*s3, c3*s2],
+                   [          s2*s1,         -c1*s2,    c2]])
+
     om = np.where(np.abs(om) < thr, 0.0, om)
     return om.reshape((3, 3) + vol_shape)
 
 
 
-def eu2om(eu):
+def eu2om_mod(eu):
     """Euler angles bunge convention to orientation matrix
     Args:
         eu (np.ndarray): Euler angles in radians
@@ -31,21 +33,21 @@ def eu2om(eu):
 
     s1, s2, s3 = np.sin(eu)
 
-    q = np.array([[c1*c3-s1*c2*s3,  s1*c3+c1*c2*s3, s2*s3],
-                  [-c1*s3-s1*c2*c3, -s1*s3+c1*c2*c3, s2*c3],
-                  [s1*s2, -c1*s2, c2]])
+    om = np.array([[ c1 * c3 - c2 * s1 * s3, c3 * s1 + c1 * c2 * s3, s3 * s2],
+                   [-c1 * s3 - c2 * c3 * s1, c1 * c2 * c3 - s1 * s3, c3 * s2],
+                   [                s2 * s1,               -c1 * s2,      c2]])
 
-    q = np.where(np.abs(q) < thr, 0.0, q)
-    return q
+    om = np.where(np.abs(om) < thr, 0.0, om)
+    return om
 
 
-def eu2om_mod(eu: np.ndarray):
+def eu2om(eu: np.ndarray):
     """Euler angles bunge convention to orientation matrix
     Args:
         eu (np.ndarray): Euler angles in degrees
     Returns:
         np.ndarray: Orientation matrix"""
-    q = eu2om(np.radians(eu))
+    q = eu2om_mod(np.radians(eu))
     return q
 
 
@@ -113,7 +115,7 @@ def determine_neighborhood(featIDs, x1, x2, x3):
     return XenvCompleteness,YenvCompleteness,ZenvCompleteness
 
 
-def deltathetakV4(gA, gB, k, symOp):
+def deltathetakV4_old(gA, gB, k, symOp):
     # determine how many symmetry cases to evaluate
     numSym = symOp.shape
 
@@ -129,8 +131,8 @@ def deltathetakV4(gA, gB, k, symOp):
     if (gB != gA).any() and gA.sum() != 0:
         # lines 17-37 correspond to misorientation calc with ori matrices
         for delg_iter in range(misori_matrix.shape[0]):
-            gA_temp = symOp[:, :, gA_iter].dot(gA.dot(symOp[:, :, gA_iter].T))
-            gB_temp = symOp[:, :, gB_iter].dot(gB.dot(symOp[:, :, gB_iter].T))
+            gA_temp = symOp[:, :, gA_iter].dot(gA)
+            gB_temp = symOp[:, :, gB_iter].dot(gB)
             # delg = gB_temp / gA_temp
             delg = np.linalg.solve(gA_temp.conj().T, gB_temp.conj().T).conj().T
             
@@ -167,10 +169,40 @@ def deltathetakV4(gA, gB, k, symOp):
     return disori
 
 
+def deltathetakV4(gA, gB, k, symOp):
+    numSym = symOp.shape
+    misori_matrix = np.zeros(numSym[2]**2)
+    gA_temps = np.einsum("ijl,jkl->ikl", symOp, np.einsum('ij,kjl->ikl', gA, symOp))
+    gB_temps = np.einsum("ijl,jkl->ikl", symOp, np.einsum('ij,kjl->ikl', gB, symOp))
+    gA_temps = np.moveaxis(gA_temps, 2, 0).transpose(0, 2, 1)
+    gB_temps = np.moveaxis(gB_temps, 2, 0).transpose(0, 2, 1)
+    indices = np.indices((numSym[2], numSym[2])).reshape(2, -1)
+    gA_temps = gA_temps[indices[0]]
+    gB_temps = gB_temps[indices[1]]
+    delgs = np.linalg.solve(gA_temps.conj(), gB_temps.conj()).conj().transpose(0, 2, 1)
+    delthetas = np.arccos((np.diagonal(delgs, axis1=1, axis2=2).sum(axis=1) - 1) / 2)
+    
+    # Where deltheta is zero, misorientation matrix is zero
+    misori_matrix[delthetas == 0] = 0
+    
+    if k == 1:
+        misori_matrix[delthetas != 0] = -(delgs[delthetas != 0, 0, 1] - delgs[delthetas != 0, 1, 0]) * (delthetas[delthetas != 0] / (2 * np.sin(delthetas[delthetas != 0])))
+    elif k == 2:
+        misori_matrix[delthetas != 0] = -(delgs[delthetas != 0, 2, 0] - delgs[delthetas != 0, 0, 2]) * (delthetas[delthetas != 0] / (2 * np.sin(delthetas[delthetas != 0])))
+    elif k == 3:
+        misori_matrix[delthetas != 0] = -(delgs[delthetas != 0, 1, 2] - delgs[delthetas != 0, 2, 1]) * (delthetas[delthetas != 0] / (2 * np.sin(delthetas[delthetas != 0])))
+    else:
+        misori_matrix[delthetas != 0] = 0
+    
+    d_col = np.argmin(np.abs(misori_matrix))
+    disori = np.abs(misori_matrix[d_col])
+    return disori
+
+
 def determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x1, x2, x3, symOp):
 
     # determine misorientation and kappa based on material point neighborhood
-    dthe = np.zeros((3,3))
+    dthe = np.zeros((3, 3))
 
     # orientation matrix of material point
     gA = GAO[:, :, x1, x2, x3]
@@ -350,6 +382,11 @@ def L2_SparseV2(alpha, cs, A, B, burgers):
 # Need to be able to grab neighboring featIDs
 
 def GND(coords, featIDs, GAO, cs, symOp, spacing, A, B, burgers):
+    # Prep calucation of GND
+    # burgers, A, numModes, numSlip, cs, B = xtal()
+    # burgers = burgers * 1e-10
+    # symOp = symmetry_operators(cs)
+    
     # Get coordinates of current point
     x1 = coords[0].astype(int)
     x2 = coords[1].astype(int)
@@ -363,7 +400,6 @@ def GND(coords, featIDs, GAO, cs, symOp, spacing, A, B, burgers):
 
         # Determine Disorientation between material points and neighbors, influenced by neighborhood
         # Calculate kappa for material points
-        # Returns
         dthe, diffOperatorX, diffOperatorY, diffOperatorZ = determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x1, x2, x3, symOp)
 
         # Calculate average misorientation from dthe
@@ -375,7 +411,9 @@ def GND(coords, featIDs, GAO, cs, symOp, spacing, A, B, burgers):
         
         # Convert Kappa to crystal coordinates since dislocations are
         # described in crystal coordinates
-        kappaSRprime = GAO[:, :, x1, x2, x3].T.dot(kappaSR).dot(GAO[:, :, x1, x2, x3])
+        # kappaSRprime = GAO[:, :, x1, x2, x3].T.dot(kappaSR).dot(GAO[:, :, x1, x2, x3])
+        # kappaSRprime = GAO[:, :, x1, x2, x3].T.dot(kappaSR[:, ::-1]).dot(GAO[:, :, x1, x2, x3])
+        kappaSRprime = GAO[:, :, x1, x2, x3].dot(kappaSR).dot(GAO[:, :, x1, x2, x3].T)
         
         # Calculate Nye Tensor (alpha) from curvature kappa  
         alphaSR = kappaSRprime.T - np.trace(kappaSRprime)
@@ -503,8 +541,6 @@ def xtal():
     burgers = 2.5
 
     # generate full A matrices
-    A_bcc, checknorm = BCC_A_matrix_generationV2()
-    d1, d2, d3, d4, d5 = HCP_A_matrix_mk3()
 
     # create linear operator B for FCC
     # constants used for linear operator
@@ -535,8 +571,9 @@ def xtal():
                   [5*d,     0,    -f,     0,  -d,     0,    -f,     0, 5*d],
                   [ -d,     0,     0,     0, 5*d,    -f,     0,    -f, 5*d]])
         
-    # prompt user based on xtal selection
+    # BCC
     if cs == 2:
+        A_bcc, checknorm = BCC_A_matrix_generationV2()
         print('Include which slip modes?\n')
         A_matrix_choice = int(input('1: screw + [110]\n2: screw + [112]\n3: screw + [123]\n4: screw + [110] + [112]\n5: screw + [110] + [112] + [123]\n'))
         if A_matrix_choice == 1:
@@ -561,7 +598,9 @@ def xtal():
         A_sparse = a_bcc
         numNye, numSlip = A_sparse.shape
         
+    # HCP
     elif cs == 3:
+        d1, d2, d3, d4, d5 = HCP_A_matrix_mk3()
         print('Include which slip modes? \n')
         A_matrix_choice = int(input('1: basal\n2: basal + prismatic\n3: basal + prismatic + pyramidal(c+a)\n'))
         if A_matrix_choice == 1:
@@ -580,6 +619,7 @@ def xtal():
         A_sparse = A_hcp
         numNye, numSlip = A_sparse.shape
         
+    # FCC
     else:
         print('Defaulting to FCC.')
 
@@ -974,5 +1014,3 @@ def HCP_A_matrix_mk3():
     # -- from here, dislocation dyads are established and user will define slip
     # systems to contribute to A matrix
     return (d1, d2, d3, d4, d5)
-
-symmetry_operators(2)
