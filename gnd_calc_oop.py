@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import h5py
 import mpire
+from rich.progress import track
 
 import py_functions as pf
 import GND
@@ -37,10 +38,17 @@ coordinates = coordinates.reshape(-1, 3)
 if __name__ == '__main__':
     gnd = GND.GND(cs, burgers)
     gnd.set_data(coordinates, euler, featIDs, spacing)
+    gnd.enforce_mask_on_input(gnd.featIDs == 0)
     coords = list(coordinates)
+    # Non parallel:
+    # results = []
+    # for i in track(range(len(coords)), "Calculating GND"):
+    #     results.append(gnd.compute(coords[i], verbose=False))
+    # Parallel:
     with mpire.WorkerPool(n_jobs=8) as pool:
         results = pool.map(gnd.compute, coords, progress_bar=True, max_tasks_active=9)
 
+    exit()
     print("Calculation complete. Unpacking results...")
     gnd.unpack_data(results)
     
@@ -54,7 +62,7 @@ if __name__ == '__main__':
     gnd_ss[slice_x1, slice_x2, slice_x3] = gnd.GND_SS
         
     print("Saving data.")
-    np.save(directory + ID + "_GND_SR.npy", gnd_sr)
-    np.save(directory + ID + "_misori.npy", gnd_misori)
-    np.save(directory + ID + "_GND_SS.npy", gnd_ss)
+    # np.save(directory + ID + "_GND_SR.npy", gnd_sr)
+    # np.save(directory + ID + "_misori.npy", gnd_misori)
+    # np.save(directory + ID + "_GND_SS.npy", gnd_ss)
     print("Complete")

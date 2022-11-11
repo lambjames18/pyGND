@@ -1,3 +1,4 @@
+import traceback
 import numpy as np
 
 class GND:
@@ -13,6 +14,9 @@ class GND:
         self.GAO = self.eu2om_multi(euler_angles)
         self.featIDs = feature_ids
         self.spacing = spacing
+    
+    def enforce_mask_on_input(self, mask):
+        self.GAO[:, :, mask] = 0.0
     
     def unpack_data(self, data):
         self.GND_SR = np.zeros(self.featIDs.size, dtype=float)
@@ -31,42 +35,100 @@ class GND:
             point_coords = self.coordinates[i]
             self.GND_SR[i], self.misori[i], self.GND_SS[i] = self.compute(point_coords, self.featIDs, self.GAO, self.cs, self.symOp, self.spacing, self.A, self.B, self.burgers)
     
-    def compute(self, coords):
-        # Get coordinates of current point
-        x1 = coords[0].astype(int)
-        x2 = coords[1].astype(int)
-        x3 = coords[2].astype(int)
+    def compute(self, coords, verbose=False):
+        XenvCompleteness = None
+        dthe = None
+        kappaSR = None
+        kappaSRprime = None
+        alphaSR = None
+        try:
+            # Get coordinates of current point
+            x1 = coords[0].astype(int)
+            x2 = coords[1].astype(int)
+            x3 = coords[2].astype(int)
 
-        # no calculations if inside void or outside microstructure
-        if self.GAO[:, :, x1, x2, x3].sum() != 0:
-            # Determine what neighborhood the point has
-            XenvCompleteness, YenvCompleteness, ZenvCompleteness = self._determine_neighborhood(self.featIDs, x1, x2, x3)
-            # Determine Disorientation between material points and neighbors, influenced by neighborhood
-            dthe, diffOperatorX, diffOperatorY, diffOperatorZ = self._determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, self.GAO, x1, x2, x3, self.symOp)
-            # Calculate average misorientation from dthe
-            avg_misori = np.mean(np.abs(dthe))
-            # kappaSR = determine_kappaV5(dthe, diffOperatorX, diffOperatorY, diffOperatorZ, spacing)
-            diffOperators = np.array([diffOperatorX, diffOperatorY, diffOperatorZ])
-            kappaSR = self._determine_kappaV5(dthe, diffOperators, self.spacing)
-            # Convert Kappa to crystal coordinates since dislocations are described in crystal coordinates
-            # kappaSRprime = GAO[:, :, x1, x2, x3].T.dot(kappaSR).dot(GAO[:, :, x1, x2, x3])
-            # kappaSRprime = GAO[:, :, x1, x2, x3].T.dot(kappaSR[:, ::-1]).dot(GAO[:, :, x1, x2, x3])
-            kappaSRprime = self.GAO[:, :, x1, x2, x3].dot(kappaSR).dot(self.GAO[:, :, x1, x2, x3].T)
-            # Calculate Nye Tensor (alpha) from curvature kappa  
-            alphaSR = kappaSRprime.T - np.trace(kappaSRprime)
-            # determine dislocation densities (dd -> rho) from misorientations
-            ddSR = self._L2_SparseV2(alphaSR, self.cs, self.A, self.B, self.burgers)
-            # determine total gnd density to be sum of dislocation density across all slip systems
-            totalGNDdensitySR = np.abs(ddSR).sum()
-            ddSR = np.abs(ddSR).T
-        else:
-            # tame output for voxels where misorientation can't be calc
-            avg_misori = 0
-            totalGNDdensitySR = 0
-            ddSR_dim = self.A.shape[1]
-            ddSR = np.zeros((1, ddSR_dim))
+            # no calculations if inside void or outside microstructure
+            if self.GAO[:, :, x1, x2, x3].sum() != 0:
+                # Determine what neighborhood the point has
+                # XenvCompleteness, YenvCompleteness, ZenvCompleteness = self._determine_neighborhood_old(self.featIDs, x1, x2, x3)
+                XenvCompleteness, YenvCompleteness, ZenvCompleteness = self._determine_neighborhood(self.featIDs, x1, x2, x3)
+                # Determine Disorientation between material points and neighbors, influenced by neighborhood
+                dthe, diffOperatorX, diffOperatorY, diffOperatorZ = self._determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, self.GAO, x1, x2, x3, self.symOp)
+                # dthe = dthe[:, ::-1]
+                # Calculate average misorientation from dthe
+                avg_misori = np.mean(np.abs(dthe))
+                # kappaSR = determine_kappaV5(dthe, diffOperatorX, diffOperatorY, diffOperatorZ, spacing)
+                diffOperators = np.array([diffOperatorX, diffOperatorY, diffOperatorZ])
+                kappaSR = self._determine_kappaV5(dthe, diffOperators, self.spacing)
+                # Convert Kappa to crystal coordinates since dislocations are described in crystal coordinates
+                # kappaSRprime = GAO[:, :, x1, x2, x3].T.dot(kappaSR).dot(GAO[:, :, x1, x2, x3])
+                kappaSRprime = self.GAO[:, :, x1, x2, x3].T.dot(kappaSR[:, ::-1]).dot(self.GAO[:, :, x1, x2, x3])
+                # kappaSRprime = self.GAO[:, :, x1, x2, x3].dot(kappaSR).dot(self.GAO[:, :, x1, x2, x3].T)
+                # Calculate Nye Tensor (alpha) from curvature kappa
+                alphaSR = kappaSRprime.T - np.trace(kappaSRprime)
+                # determine dislocation densities (dd -> rho) from misorientations
+                ddSR = self._L2_SparseV2(alphaSR, self.cs, self.A, self.B, self.burgers)
+                # determine total gnd density to be sum of dislocation density across all slip systems
+                totalGNDdensitySR = np.abs(ddSR).sum()
+                ddSR = np.abs(ddSR).T
+                if verbose:
+                    # print("GAO:")
+                    # self._print(self.GAO[:, :, x1, x2, x3])
+                    # print("dthe:")
+                    # self._print(dthe)
+                    # print("kappaSR:")
+                    # self._print(kappaSR)
+                    # print("kappaSRprime:")
+                    # self._print(kappaSRprime)
+                    # print("alphaSR:")
+                    # self._print(alphaSR)
+                    # print("ddSR:\n", ddSR)
+                    print("totalGNDdensitySR: ", totalGNDdensitySR)
+            else:
+                # tame output for voxels where misorientation can't be calc
+                avg_misori = 0
+                totalGNDdensitySR = 0
+                ddSR_dim = self.A.shape[1]
+                ddSR = np.zeros((1, ddSR_dim))
 
-        return (totalGNDdensitySR, avg_misori, ddSR)
+            return (totalGNDdensitySR, avg_misori, ddSR)
+        except Exception as e:
+            print("Error in compute: ", e)
+            print("coords: ", coords)
+            print("index: ", coords.sum())
+            print("GAO: ", self.GAO[:, :, x1, x2, x3])
+            if XenvCompleteness is not None:
+                print("XenvCompleteness: ", XenvCompleteness)
+                print("YenvCompleteness: ", YenvCompleteness)
+                print("ZenvCompleteness: ", ZenvCompleteness)
+            if dthe is not None:
+                print("dthe: ", dthe)
+            else:
+                print("Failed to calculate dthe")
+                print("gA:", self._latestgA)
+                print("gB:", self._latestgB)
+                traceback.print_exc()
+                exit()
+            if kappaSR is not None:
+                print("kappaSR: ", kappaSR)
+            else:
+                print("Failed to calculate kappaSR")
+                traceback.print_exc()
+                exit()
+            if kappaSRprime is not None:
+                print("kappaSRprime: ", kappaSRprime)
+            else:
+                print("Failed to calculate kappaSRprime")
+                traceback.print_exc()
+                exit()
+            if alphaSR is not None:
+                print("alphaSR: ", alphaSR)
+            else:
+                print("Failed to calculate alphaSR")
+                traceback.print_exc()
+                exit()
+            traceback.print_exc()
+            exit()
     
     def get_symmetry_operators(self):
         # define symmetry operators for cubic or hexagonal symmetries
@@ -219,9 +281,65 @@ class GND:
         # return np.moveaxis(om, -1, 0)
         return om.reshape((3, 3) + vol_shape)
 
+    def _neighbors(self, x1, x2, x3):
+        x1_min, x1_max = max(0, x1-1), min(self.featIDs.shape[0]-1, x1+1) + 1
+        x2_min, x2_max = max(0, x2-1), min(self.featIDs.shape[1]-1, x2+1) + 1
+        x3_min, x3_max = max(0, x3-1), min(self.featIDs.shape[2]-1, x3+1) + 1
+        sub_volume = np.pad(self.featIDs[x1_min:x1_max, x2_min:x2_max, x3_min:x3_max], 1, 'constant')
+        temp = np.copy(self.featIDs[x1_min:x1_max, x2_min:x2_max, x3_min:x3_max])
+        temp[x1-x1_min, x2-x2_min, x3-x3_min] = -1
+        center = np.array(np.where(temp == -1))[:, 0] + 1
+        x1_neighbors = sub_volume[center[0]-1:center[0]+2, center[1], center[2]]
+        x2_neighbors = sub_volume[center[0], center[1]-1:center[1]+2, center[2]]
+        x3_neighbors = sub_volume[center[0], center[1], center[2]-1:center[2]+2]
+        # print(sub_volume)
+        # print(x1_neighbors, x2_neighbors, x3_neighbors)
+        return (x1_neighbors, x2_neighbors, x3_neighbors)
+    
     def _determine_neighborhood(self, featIDs, x1, x2, x3):
-        # checking completeness of the voxel neighborhood in x dimension
+        # Create an empty neighborhood
+        Xenv, Yenv, Zenv = "", "", ""
+        # Get the local environment of the current voxel (1 connectivity)
+        ref_id = featIDs[x1, x2, x3]
+        x1_n, x2_n, x3_n = self._neighbors(x1, x2, x3)
 
+        # Quick check for the most common case
+        if np.allclose(x1_n, ref_id):
+            Xenv = 'central'
+        if np.allclose(x2_n, ref_id):
+            Yenv = 'central'
+        if np.allclose(x3_n, ref_id):
+            Zenv = 'central'
+        
+        # Check which ones need to be completed, x1 then x2, then x3
+        if Xenv == "":
+            # Check if the next or previous voxel is the same as the reference
+            # If neither are the same, set as central
+            if x1_n[0] == ref_id:
+                Xenv = "backward"
+            elif x1_n[-1] == ref_id:
+                Xenv = "forward"
+            else:
+                Xenv = 'constant'
+        if Yenv == "":
+            if x2_n[0] == ref_id:
+                Yenv = "backward"
+            elif x2_n[-1] == ref_id:
+                Yenv = "forward"
+            else:
+                Yenv = 'constant'
+        if Zenv == "":
+            if x3_n[0] == ref_id:
+                Zenv = "backward"
+            elif x3_n[-1] == ref_id:
+                Zenv = "forward"
+            else:
+                Zenv = 'constant'
+
+        return (Xenv, Yenv, Zenv)
+        
+    def _determine_neighborhood_old(self, featIDs, x1, x2, x3):
+        # checking completeness of the voxel neighborhood in x dimension
         # if the voxel is on the edge of the microstructure
         if x1 == 0:
             XenvCompleteness = 'forward'
@@ -241,7 +359,6 @@ class GND:
             XenvCompleteness = 'constant'
 
         # checking completeness of the voxel neighborhood in y dimension    
-
         # if the voxel is on the edge of the microstructure
         if x2 == 0:
             YenvCompleteness = 'forward'
@@ -261,7 +378,6 @@ class GND:
             YenvCompleteness = 'constant'
 
         # checking completeness of the voxel neighborhood in z dimension 
-
         # if the voxel is on the edge of the microstructure
         if x3 == 0:
             ZenvCompleteness = 'forward'
@@ -283,17 +399,22 @@ class GND:
         return XenvCompleteness,YenvCompleteness,ZenvCompleteness
 
     def _deltathetakV4(self, gA, gB, k, symOp):
-        numSym = symOp.shape
+        self._latestgA = gA
+        self._latestgB = gB
+        # symOp = symOp[:, :, :5]
+        numSym = symOp.shape # 3x3x24
         misori_matrix = np.zeros(numSym[2]**2)
         gA_temps = np.einsum("ijl,jkl->ikl", symOp, np.einsum('ij,kjl->ikl', gA, symOp))
         gB_temps = np.einsum("ijl,jkl->ikl", symOp, np.einsum('ij,kjl->ikl', gB, symOp))
-        gA_temps = np.moveaxis(gA_temps, 2, 0).transpose(0, 2, 1)
-        gB_temps = np.moveaxis(gB_temps, 2, 0).transpose(0, 2, 1)
+        gA_temps = np.moveaxis(gA_temps, 2, 0).transpose(0, 2, 1).conj()
+        gB_temps = np.moveaxis(gB_temps, 2, 0).transpose(0, 2, 1).conj()
         indices = np.indices((numSym[2], numSym[2])).reshape(2, -1)
-        gA_temps = gA_temps[indices[0]]
-        gB_temps = gB_temps[indices[1]]
-        delgs = np.linalg.solve(gA_temps.conj(), gB_temps.conj()).conj().transpose(0, 2, 1)
-        delthetas = np.arccos((np.diagonal(delgs, axis1=1, axis2=2).sum(axis=1) - 1) / 2)
+        gA_temps = gA_temps[indices[0]] # 24x24
+        gB_temps = gB_temps[indices[1]] # 24x24
+        delgs = np.linalg.solve(gA_temps, gB_temps).conj().transpose(0, 2, 1) # 576x3x3
+        # delgs = np.linalg.solve(gA_temps, gB_temps).transpose(0, 2, 1) # 576x3x3
+        l = np.around((np.diagonal(delgs, axis1=1, axis2=2).sum(axis=1) - 1) / 2, 6)
+        delthetas = np.arccos(l)
         
         # Where deltheta is zero, misorientation matrix is zero
         misori_matrix[delthetas == 0] = 0
@@ -487,6 +608,10 @@ class GND:
             dd = dd/burgers
         #-----------------------------------------------------------------------
         return dd
+
+    def _print(self, array):
+        out = np.around(np.hstack((array[:, 0], array[:, 1], array[:, 2])), 6)
+        print(out)
     
     def _BCC_A_matrix_generationV2(self):
         # BCC A matrix formulation
