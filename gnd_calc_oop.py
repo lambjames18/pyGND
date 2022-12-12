@@ -9,26 +9,38 @@ import GND
 
 directory = "./output_data/"
 # Name output file
-ID = "R2S10S5"
+ID = "R2S9S4"
 
 # Convert Burgers to m
 burgers = 2.5
 cs = 1
 
 # Read data
-h = h5py.File("D:/Research/R2_Sample10-Shot5/Data/3D/R2S10S5.dream3d")
+h = h5py.File(f"D:/Research/NiAlMo_APS/Data/3D/{ID}_Isotropic.dream3d")
 spacing = np.squeeze(h["DataContainers/ImageDataContainer/_SIMPL_GEOMETRY/SPACING"][...]) * 1e-6
 featIDs = np.squeeze(h["DataContainers/ImageDataContainer/CellData/FeatureIds"][...])
 euler = np.squeeze(h["DataContainers/ImageDataContainer/CellData/EulerAngles"][...])
-# h.close()
+iq = np.squeeze(h["DataContainers/ImageDataContainer/CellData/IQ"][...])
+print("Spacing:", spacing)
+print("Number of points:", featIDs.size)
+print("Dataset shape:", featIDs.shape)
 full_shape = featIDs.shape
 
 # Remove planes with no grains
-slice_x1 = slice(None, 447)
-slice_x2 = slice(26, 374)
-slice_x3 = slice(25, None)
+# For R2S9S4
+# slice_x1 = slice(None, 447)  # For R2S10S5
+# slice_x2 = slice(26, 374)  # For R2S10S5
+# slice_x3 = slice(25, None)  # For R2S10S5
+slice_x1 = slice(None)  # For R2S9S4
+slice_x2 = slice(16, 314)  # For R2S9S4
+slice_x3 = slice(None, 407)  # For R2S9S4
+# slice_x1 = slice(None)  # For CoNiS29S2
+# slice_x2 = slice(None)  # For CoNiS29S2
+# slice_x3 = slice(None)  # For CoNiS29S2
 featIDs = featIDs[slice_x1, slice_x2, slice_x3]
 euler = euler[slice_x1, slice_x2, slice_x3]
+print("Number of points (after crop):", featIDs.size)
+print("Dataset shape (after crop):", featIDs.shape)
 
 # Get xyz
 x1, x2, x3 = np.indices(featIDs.shape)
@@ -45,10 +57,10 @@ if __name__ == '__main__':
     # for i in track(range(len(coords)), "Calculating GND"):
     #     results.append(gnd.compute(coords[i], verbose=False))
     # Parallel:
-    with mpire.WorkerPool(n_jobs=8) as pool:
-        results = pool.map(gnd.compute, coords, progress_bar=True, max_tasks_active=9)
+    with mpire.WorkerPool(n_jobs=10) as pool:
+        results = pool.map(gnd.compute, coords, progress_bar=True, max_tasks_active=11)
 
-    exit()
+    # exit()
     print("Calculation complete. Unpacking results...")
     gnd.unpack_data(results)
     
@@ -62,7 +74,7 @@ if __name__ == '__main__':
     gnd_ss[slice_x1, slice_x2, slice_x3] = gnd.GND_SS
         
     print("Saving data.")
-    # np.save(directory + ID + "_GND_SR.npy", gnd_sr)
-    # np.save(directory + ID + "_misori.npy", gnd_misori)
-    # np.save(directory + ID + "_GND_SS.npy", gnd_ss)
+    np.save(directory + ID + "_GND_SR.npy", gnd_sr)
+    np.save(directory + ID + "_misori.npy", gnd_misori)
+    np.save(directory + ID + "_GND_SS.npy", gnd_ss)
     print("Complete")

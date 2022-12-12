@@ -8,7 +8,7 @@ import h5py
 class InteractiveSlider:
     def __init__(self, stack, alphas=None, vmin=None, vmax=None, cmap="gray"):
         if alphas is None:
-            alphas = np.ones(stack.shape[1:])
+            alphas = np.ones(stack.shape[1:3])
         if vmin is None:
             vmin = np.min(stack)
         if vmax is None:
@@ -51,15 +51,20 @@ class InteractiveSlider:
         self.im.axes.figure.canvas.draw()
         self.fig.canvas.draw_idle()
 
-sr = np.load("./output_data/R2S10S5_GND_SR.npy")
-sr[np.isnan(sr)] = 0
-ss = np.load("./output_data/R2S10S5_GND_SS.npy")
-ss[np.isnan(ss)] = 0
-ms = np.load("./output_data/R2S10S5_misori.npy")
-ms[np.isnan(ms)] = 0
+name = "R2S10S5"
+name = "CoNiS29S2"
+name = "R2S9S4"
+sr = np.load(f"./output_data/{name}_GND_SR.npy")
+ss = np.load(f"./output_data/{name}_GND_SS.npy")
+ms = np.load(f"./output_data/{name}_misori.npy")
+
+sr = np.log10(sr, where=sr > 0)
 
 print(sr.shape, ss.shape, ms.shape)
 print(sr.dtype, ss.dtype, ms.dtype)
 
-InteractiveSlider(sr, vmin=1e12, vmax=1e15, cmap="jet")
-InteractiveSlider(ms, vmax=0.01, cmap='coolwarm')
+# sr = np.swapaxes(sr, 2, 0)
+# ms = np.swapaxes(ms, 2, 0)
+
+InteractiveSlider(sr, vmin=sr[sr>0].min(), vmax=sr.max(), cmap="jet")
+InteractiveSlider(ms, vmin=0.01, vmax=0.3, cmap='coolwarm')
