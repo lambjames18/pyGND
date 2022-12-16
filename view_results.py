@@ -51,6 +51,9 @@ class InteractiveSlider:
         self.im.axes.figure.canvas.draw()
         self.fig.canvas.draw_idle()
 
+h = h5py.File("D:/Research/CoNi_16/Data/3D/CoNi16_aligned_corrected.dream3d", "r")
+InteractiveSlider(h["DataContainers/ImageDataContainer/CellData/XC"][...], vmin=0.14, vmax=0.6, cmap="jet")
+exit()
 name = "R2S10S5"
 name = "CoNiS29S2"
 name = "R2S9S4"

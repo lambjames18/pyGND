@@ -1,5 +1,25 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
+
+def determine_slicing(featIDs):
+    mask = featIDs > 0
+    p0 = mask.sum(axis=0) > 0
+    p1 = mask.sum(axis=1) > 0
+    p2 = mask.sum(axis=2) > 0
+    fig = plt.figure()
+    ax0 = fig.add_subplot(131)
+    ax1 = fig.add_subplot(132)
+    ax2 = fig.add_subplot(133)
+    ax0.imshow(p0)
+    ax1.imshow(p1)
+    ax2.imshow(p2)
+    ax0.set_title("1 and 2 axes")
+    ax1.set_title("0 and 2 axes")
+    ax2.set_title("0 and 1 axes")
+    plt.tight_layout()
+    plt.show()
+    
 
 def eu2om_multi(eu: np.ndarray):
     thr = 1e-10
