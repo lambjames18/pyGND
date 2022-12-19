@@ -51,12 +51,10 @@ class InteractiveSlider:
         self.im.axes.figure.canvas.draw()
         self.fig.canvas.draw_idle()
 
-h = h5py.File("D:/Research/CoNi_16/Data/3D/CoNi16_aligned_corrected.dream3d", "r")
-InteractiveSlider(h["DataContainers/ImageDataContainer/CellData/XC"][...], vmin=0.14, vmax=0.6, cmap="jet")
-exit()
 name = "R2S10S5"
 name = "CoNiS29S2"
 name = "R2S9S4"
+name = "CoNi16"
 sr = np.load(f"./output_data/{name}_GND_SR.npy")
 ss = np.load(f"./output_data/{name}_GND_SS.npy")
 ms = np.load(f"./output_data/{name}_misori.npy")
@@ -68,6 +66,26 @@ print(sr.dtype, ss.dtype, ms.dtype)
 
 # sr = np.swapaxes(sr, 2, 0)
 # ms = np.swapaxes(ms, 2, 0)
+sr_data = np.zeros((200, sr.shape[0]))
+for i in range(sr.shape[0]):
+    hist, edges = np.histogram(sr[i, sr[i] > 0], bins=200, range=(13, 17), density=True)
+    sr_data[:, i] = hist[::-1]
 
-InteractiveSlider(sr, vmin=sr[sr>0].min(), vmax=sr.max(), cmap="jet")
-InteractiveSlider(ms, vmin=0.01, vmax=0.3, cmap='coolwarm')
+fig = plt.figure(figsize=(12, 8))
+ax = fig.add_subplot(111)
+im = ax.imshow(sr_data, cmap="jet")
+ax.set_xlabel("Slice #")
+ax.set_yticks(np.linspace(0, 200, 5))
+ax.set_yticklabels(np.linspace(17, 13, 5))
+
+cax = fig.add_axes([ax.get_position().x1 + 0.01, ax.get_position().y0, 0.02, ax.get_position().height])
+plt.colorbar(im, cax=cax)
+plt.show()
+exit()
+
+mn, mx = np.percentile(sr[sr>0], (2.0, 90.0))
+print(mn, mx)
+InteractiveSlider(sr, vmin=mn, cmap="jet")
+mn, mx = np.percentile(ms[ms>0], (5.0, 99.0))
+print(mn, mx)
+InteractiveSlider(ms, vmin=mn, vmax=mx, cmap='coolwarm')
