@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 
 def cut_dataset(vol, num_cuts, cut_axis, verbose=True):
     """Cut a dataset into subvolumes using the feature IDs 3D data."""
+    verbose_slice = vol.shape[0] // 2
     cut_width = vol.shape[cut_axis] // num_cuts
 
     # Divide the volume into sub volumes based on the cut locations
@@ -43,11 +44,20 @@ def cut_dataset(vol, num_cuts, cut_axis, verbose=True):
             plt.close("all")
 
     if verbose:
+        fig = plt.figure(figsize=(6, 6))
+        ax = fig.add_subplot(111)
+        ax.imshow(vol[verbose_slice])
+        if cut_axis == 1:
+            for i in range(1, num_cuts):
+                ax.axhline(cut_width * i, color="r")
+        elif cut_axis == 2:
+            for i in range(1, num_cuts):
+                ax.axvline(cut_width * i, color="r")
         fig = plt.figure(figsize=(12, 12/num_cuts))
         for i in range(num_cuts):
             ax = fig.add_subplot(1, num_cuts, i+1)
             ax.set_title("Subvolume {}".format(i+1))
-            ax.imshow(np.where(subvolume[50] == i+1, vol[50], 0))
+            ax.imshow(np.where(subvolume[verbose_slice] == i+1, vol[verbose_slice], 0))
             ax.spines["top"].set_visible(False)
             ax.spines["right"].set_visible(False)
             ax.spines["bottom"].set_visible(False)
