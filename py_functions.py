@@ -2,6 +2,56 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
+def cut_dataset(vol, num_cuts, cut_axis, verbose=True):
+    """Cut a dataset into subvolumes using the feature IDs 3D data."""
+    cut_width = vol.shape[cut_axis] // num_cuts
+
+    # Divide the volume into sub volumes based on the cut locations
+    print("Dividing the volume into sub volumes based on the cut locations")
+    cuts_ids = []
+    taken_ids = []
+    for i in range(num_cuts):
+        slc = tuple(slice(None) if _ != cut_axis else slice(cut_width*i, cut_width*(i+1)) for _ in range(vol.ndim))
+        current_ids = np.unique(vol[slc])
+        unique_current_ids = np.setdiff1d(current_ids, np.array(taken_ids))
+        cuts_ids.append(unique_current_ids[unique_current_ids != 0])
+        taken_ids.extend(cuts_ids[i])
+
+    print("Assigning each voxel to a subvolume")
+    subvolume = np.zeros_like(vol)
+    for i in range(num_cuts):
+        mask = np.isin(vol, cuts_ids[i])
+        subvolume[mask] = i + 1
+
+    print("Finding the bounds of each subvolume")
+    bounds = np.zeros((num_cuts, 2), dtype=int)
+    for i in range(num_cuts):
+        mask = np.isin(subvolume, i + 1)
+        mn = np.array(np.where(mask)).min(axis=1)[cut_axis]
+        mx = np.array(np.where(mask)).max(axis=1)[cut_axis]
+        bounds[i] = mn, mx
+        if verbose:
+            plt.imshow(mask.sum(axis=0).astype(bool))
+            if cut_axis == 1:
+                plt.axhline(mn, color="r")
+                plt.axhline(mx, color="r")
+            elif cut_axis == 2:
+                plt.axvline(mn, color="r")
+                plt.axvline(mx, color="r")
+            plt.title("Bounds for cut {}".format(i))
+            plt.show()
+            plt.close("all")
+
+    if verbose:
+        fig = plt.figure(figsize=(12, 4))
+        for i in range(num_cuts):
+            ax = fig.add_subplot(1, num_cuts, i+1)
+            ax.imshow(np.where(subvolume[50] == i, vol[50], 0))
+        plt.show()
+    
+    return bounds
+
+
 def determine_slicing(featIDs):
     mask = featIDs > 0
     p0 = mask.sum(axis=0) > 0
