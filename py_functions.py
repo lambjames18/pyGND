@@ -43,10 +43,16 @@ def cut_dataset(vol, num_cuts, cut_axis, verbose=True):
             plt.close("all")
 
     if verbose:
-        fig = plt.figure(figsize=(12, 4))
+        fig = plt.figure(figsize=(12, 12/num_cuts))
         for i in range(num_cuts):
             ax = fig.add_subplot(1, num_cuts, i+1)
+            ax.set_title("Subvolume {}".format(i+1))
             ax.imshow(np.where(subvolume[50] == i+1, vol[50], 0))
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            ax.spines["bottom"].set_visible(False)
+            ax.spines["left"].set_visible(False)
+        plt.tight_layout()
         plt.show()
     
     return bounds
