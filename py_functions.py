@@ -46,7 +46,7 @@ def cut_dataset(vol, num_cuts, cut_axis, verbose=True):
         fig = plt.figure(figsize=(12, 4))
         for i in range(num_cuts):
             ax = fig.add_subplot(1, num_cuts, i+1)
-            ax.imshow(np.where(subvolume[50] == i, vol[50], 0))
+            ax.imshow(np.where(subvolume[50] == i+1, vol[50], 0))
         plt.show()
     
     return bounds
