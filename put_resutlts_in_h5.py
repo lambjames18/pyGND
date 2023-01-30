@@ -4,12 +4,14 @@ import matplotlib.pyplot as plt
 
 name = "TaAMSpalled_mini"
 sr = np.load(f"./output_data/TaAMSpall-Test_GND_SR.npy")
-sr = np.log10(sr, where=sr > 0)
-plt.hist(sr[sr > 0].flatten(), bins=100, density=True)
+# sr = np.log10(sr, where=sr > 0)
+bins = np.logspace(9, 15, 100)
+plt.hist(sr[sr > 0].flatten(), bins=bins, density=True)
+plt.xscale("log")
 plt.title("Subvolume GND SR")
 plt.show()
 print("{:.4e}, {:.4e}".format(sr[sr > 0].min(), sr.max()))
-exit()
+# exit()
 print(np.isnan(sr).sum())
 h = h5py.File(f"TaAMSpalled_mini.dream3d", "r+")
 h["DataContainers/ImageDataContainer/CellData/GND_Python2"][...] = sr.reshape(sr.shape + (1,))

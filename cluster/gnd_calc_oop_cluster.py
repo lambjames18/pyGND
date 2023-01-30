@@ -40,7 +40,14 @@ def main(path, burgers, cs):
     h = h5py.File(path)
     spacing = np.squeeze(h["DataContainers/ImageDataContainer/_SIMPL_GEOMETRY/SPACING"][...]) * 1e-6
     featIDs = np.squeeze(h["DataContainers/ImageDataContainer/CellData/FeatureIds"][...])
-    euler = np.squeeze(h["DataContainers/ImageDataContainer/CellData/EulerAngles"][...])
+    try:
+        euler = np.squeeze(h["DataContainers/ImageDataContainer/CellData/EulerAngles"][...])
+    except KeyError:
+        try:
+            euler = np.squeeze(h["DataContainers/ImageDataContainer/CellData/Euler"][...])
+        except KeyError:
+            raise ValueError("The euler angles cannot be found in the DREAM3D file. Attempted to find 'EulerAngles' and 'Euler'.")
+
     h.close()
     print("\tSpacing:", spacing)
     print("\tTotal number of points:", featIDs.size)
@@ -68,6 +75,7 @@ def get_num_jobs():
     operating_system = sys.platform
     if operating_system in ["darwin", "win32", "cygwin", "msys"]:
         n_cpus = int(os.cpu_count() - 2)
+        n_cpus = 5
     else:
         n_cpus = len(os.sched_getaffinity(0))
     print("\tThere are {} processors available, all will be utilized.".format(n_cpus))
@@ -77,6 +85,13 @@ def get_num_jobs():
 if __name__ == '__main__':
     print("\n*** GND Calculations Python Script ***")
     print("Inputs:\n\tConfig File: {}\n\tTest Run: {}\n\tDREAM3D File: {}\n\tID: {}\n\tBurgers Vector: {}\n\tCrystallography: {}\n\tSave Folder: {}".format(args.config, args.test, path, ID, burgers, cs, directory))
+    config_exists = os.path.isfile(args.config)
+    d3d_exists = os.path.isfile(path)
+    save_exists = os.path.isdir(directory)
+    if not config_exists: raise ValueError("The config file does not exist.")
+    if not d3d_exists: raise ValueError("The DREAM3D file does not exist.")
+    if not save_exists: raise ValueError("The save directory does not exist.")
+    print("\t-> All inputs are valid.")
     print("\n-> Calling setup function")
     full_shape, cropped_shape, (slice_x1, slice_x2, slice_x3), featIDs, euler, coordinates, spacing = main(path, burgers, cs)
 
@@ -100,9 +115,9 @@ if __name__ == '__main__':
         print("Terminating the calculation, this was a test run.")
         exit()
 
-    print("---")
-    v = gnd.compute(coords[0], verbose=True)
-    exit()
+    # print("---")
+    # v = gnd.compute(coords[0], verbose=True)
+    # exit()
     
     with mpire.WorkerPool(n_jobs=n_processors, start_method="spawn") as pool:
         results = pool.map(gnd.compute, coords, progress_bar=True)

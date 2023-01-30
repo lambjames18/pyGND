@@ -53,13 +53,13 @@ class InteractiveSlider:
 
 # name = "R2S10S5"
 # name = "CoNiS29S2"
-# name = "R2S9S4"
+name = "R2S9S4"
 # name = "CoNi16"
 # name = "CoNi90"
-# sr = np.load(f"./output_data/{name}_GND_SR.npy")
+sr = np.load(f"./output_data/{name}_GND_SR.npy")
 # ss = np.load(f"./output_data/{name}_GND_SS.npy")
 # ms = np.load(f"./output_data/{name}_misori.npy")
-sr = np.load(f"D:/Research/Ta_AM-Spalled/Data/3D/Ta-AM_Spalled_GND_SR.npy")
+# sr = np.load(f"D:/Research/Ta_AM-Spalled/Data/3D/Ta-AM_Spalled_GND_SR.npy")
 
 sr = np.log10(sr, where=sr > 0)
 
