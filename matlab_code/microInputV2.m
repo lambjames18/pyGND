@@ -27,8 +27,10 @@
 %filenameIDs = 'Bicrystal2Feature1_IDs_zyx-eulersFZ_wholedata.csv';
 %filenameIDs = 'synth16_Feature1_IDs_zyx-eulersFZ_wholedata.csv';
 %filenameData = 'synth16_Feature1_zyx-eulersFZ_wholedata.csv';
-filenameIDs = 'R2S10S5_GrainIDs.csv';
-filenameData = 'R2S10S5_Data.csv';
+%filenameIDs = 'R2S10S5_GrainIDs.csv';
+%filenameData = 'R2S10S5_Data.csv';
+filenameIDs = 'D:\\Research\\scripts\\TriBeam_GND\\TaAMSpalled_mini_GrainIDs.csv';
+filenameData = 'D:\\Research\\scripts\\TriBeam_GND\\TaAMSpalled_mini_Data.csv';
 
 %filenameFeatData = '//192.168.0.102/general/MATLAB_common/GND_Matlab/CoNi16_FZ_featuredata.csv';
 %Directory = 'D:/IMMI Work/Final_output/1pct_r15_addtl_2pct/';

@@ -4,14 +4,14 @@
 
 %cs = input('Input crystallography: \n 1: FCC \n 2: BCC \n 3: HCP\n\n');
 fprintf('Input crystallography:\n')
-cs = 2
+cs = 2;
 
 %define burgers vector magnitude
 %burgers = input(['Input Burgers Vector (A): \n2.86A for Tantalum BCC'...
 %    '\n2.5A for IN718 & AlNiCo9\n2.95A for Ti'...
 %    '\n   A for CoNi\n\n']);
 fprintf('Burgers (A):\n')
-burgers = 2.86
+burgers = 2.86;
 
 % generate full A matrices
 BCC_A_matrix_generationV2
@@ -50,7 +50,7 @@ B = [a,7*c,-13*c,-7*c,-a,13*c,c,-c,0;
 if(cs == 2)
     fprintf('Include which slip modes?\n');
     %A_matrix_choice = input('1: screw + [110]\n2: screw + [112]\n3: screw + [123]\n4: screw + [110] + [112]\n5: screw + [110] + [112] + [123]\n');
-    A_matrix_choice = 5
+    A_matrix_choice = 5;
     switch A_matrix_choice
         case 1
             a_bcc = double(A_bcc(:,1:16));
@@ -82,7 +82,7 @@ if(cs == 2)
 elseif(cs == 3)
     fprintf('Include which slip modes? \n');
     %A_matrix_choice = input('1: basal\n2: basal + prismatic\n3: basal + prismatic + pyramidal(c+a)\n');
-    A_matrix_choice = 3
+    A_matrix_choice = 3;
     switch A_matrix_choice
         case 1
             A_hcp = [d1 d2];
