@@ -75,7 +75,7 @@ def get_num_jobs():
     operating_system = sys.platform
     if operating_system in ["darwin", "win32", "cygwin", "msys"]:
         n_cpus = int(os.cpu_count() - 2)
-        n_cpus = 5
+        # n_cpus = 2
     else:
         n_cpus = len(os.sched_getaffinity(0))
     print("\tThere are {} processors available, all will be utilized.".format(n_cpus))
@@ -113,18 +113,16 @@ if __name__ == '__main__':
     n_processors = get_num_jobs()
     if args.test:
         print("Terminating the calculation, this was a test run.")
+        v = gnd.compute(coords[0])
+        print("Total GND density for the first point:", v[0])
         exit()
 
-    # print("---")
-    # v = gnd.compute(coords[0], verbose=True)
-    # exit()
     
     with mpire.WorkerPool(n_jobs=n_processors, start_method="spawn") as pool:
-        results = pool.map(gnd.compute, coords, progress_bar=True)
+        results = pool.imap(gnd.compute, coords, progress_bar=True)
 
-    # exit()
-    print("\t-> Calculation complete. Unpacking results...")
     gnd.unpack_data(results)
+    print("\t-> Calculation complete. Unpacking results...")
     
     # Now pack in the data, accounting for the slices
     gnd_sr[slice_x1, slice_x2, slice_x3] = gnd.GND_SR
