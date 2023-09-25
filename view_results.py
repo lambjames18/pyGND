@@ -58,7 +58,9 @@ class InteractiveSlider:
 # name = "CoNi90"
 # name = "IN718EBM"
 # name = "TaAMSpalled"
-name = "CoNiS29S2End"
+# name = "CoNiS29S2End"
+# name = "TaAM"
+name = "CoNi67"
 sr = np.load(f"./output_data/{name}_GND_SR.npy")
 # ss = np.load(f"./output_data/{name}_GND_SS.npy")
 # ms = np.load(f"./output_data/{name}_misori.npy")
@@ -67,7 +69,7 @@ sr = np.load(f"./output_data/{name}_GND_SR.npy")
 sr = np.log10(sr, where=sr > 0)
 
 print(sr.shape)
-# sr = np.swapaxes(sr, 1, 0)
+sr = np.swapaxes(sr, 1, 0)
 
 # sr_data = np.zeros((200, sr.shape[0]))
 # for i in range(sr.shape[0]):

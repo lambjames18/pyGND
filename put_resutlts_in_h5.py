@@ -20,12 +20,15 @@ import matplotlib.pyplot as plt
 # name = "R2S9S4"
 # name = "R2S10S5"
 # name = "CoNiS29S2"
-name = "CoNiS29S2End"
+# name = "CoNiS29S2End"
 # name = "CoNi90"
 # name = "IN718EBM"
 # name = "CoNi16"
 # name = "TaSpalled"
 # name = "TaAMSpalled"
+# name = "TaAM"
+# name = "CoNi67"
+name = "R2S10S1"
 sr = np.load(f"./output_data/{name}_GND_SR.npy")
 # ss = np.load(f"./output_data/{name}_GND_SS.npy")
 # ms = np.load(f"./output_data/{name}_misori.npy")
@@ -34,14 +37,17 @@ sr = np.load(f"./output_data/{name}_GND_SR.npy")
 
 # sample = "R2S9S4"
 # sample = "R2S10S5"
-sample = "Co_APS"
+sample = "R2S10S1"
+# sample = "Co_APS"
 # sample = "CoNi_90"
 # sample = "IN718"
 # sample = "CoNi_16"
 # sample = "Ta"
+# sample = "CoNi67"
 # fname = "Raster_Start_Isotropic"
-fname = "Raster_End_Isotropic"
-# fname = name
+# fname = "Raster_End_Isotropic"
+# fname = "AMSpall/TaAMSpall"
+fname = sample + "_Isotropic"
 h = h5py.File(f"D:/Research/{sample}/Data/3D/{fname}.dream3d", "r+")
 # print(h["DataContainers/ImageDataContainer/CellData"].keys())
 # exit()
