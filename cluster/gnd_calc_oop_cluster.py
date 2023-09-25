@@ -35,7 +35,7 @@ elif cs.lower() == 'hcp': cs = 3
 else: raise ValueError("The crystallography entry in the config file was not one of the following ['fcc', 'bcc', 'hcp'].")
 
 
-def main(path, burgers, cs):
+def main(path):
     # Read data
     h = h5py.File(path)
     spacing = np.squeeze(h["DataContainers/ImageDataContainer/_SIMPL_GEOMETRY/SPACING"][...]) * 1e-6
@@ -74,11 +74,11 @@ def get_num_jobs():
     # Determine what the operating system is
     operating_system = sys.platform
     if operating_system in ["darwin", "win32", "cygwin", "msys"]:
-        n_cpus = int(os.cpu_count() - 2)
-        # n_cpus = 2
+        n_cpus = int(os.cpu_count() / 2)
+        n_cpus = 3
     else:
         n_cpus = len(os.sched_getaffinity(0))
-    print("\tThere are {} processors available, all will be utilized.".format(n_cpus))
+    print("\t{} processors will be utilized.".format(n_cpus))
     return n_cpus
 
 
@@ -93,7 +93,7 @@ if __name__ == '__main__':
     if not save_exists: raise ValueError("The save directory does not exist.")
     print("\t-> All inputs are valid.")
     print("\n-> Calling setup function")
-    full_shape, cropped_shape, (slice_x1, slice_x2, slice_x3), featIDs, euler, coordinates, spacing = main(path, burgers, cs)
+    full_shape, cropped_shape, (slice_x1, slice_x2, slice_x3), featIDs, euler, coordinates, spacing = main(path)
 
     print("\n-> Creating GND object")
     gnd = GND.GND(cs, burgers, slip_systems)
@@ -102,27 +102,35 @@ if __name__ == '__main__':
     print("\tNumber of slip systems:", gnd.numSlip)
     coords = list(coordinates)
 
+    print("\n-> Starting parallel computation")
+    n_processors = get_num_jobs()
+    if args.test:
+        print("Terminating the calculation, this was a test run.")
+        index = len(coords) // 4
+        while True:
+            if gnd.featIDs[coords[index][0], coords[index][1], coords[index][2]] != 0:
+                break
+            else:
+                index += 1
+        v = []
+        for i in range(10):
+            v.append(gnd.compute(coords[index + i])[0])
+        print("Total GND density for 10 points in the volume: {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}".format(*v))
+        exit()
+
+    
+    with mpire.WorkerPool(n_jobs=n_processors, start_method="spawn") as pool:
+        results = pool.map(gnd.compute, coords, progress_bar=True)
+
+    gnd.unpack_data(results)
+    print("\t-> Calculation complete.")
+
     # Make the output arrays
     print("\n-> Creating output arrays")
     gnd_sr = np.zeros(full_shape, dtype=np.float32)
     gnd_ms = np.zeros(full_shape, dtype=np.float32)
     gnd_ss = np.zeros(full_shape + (gnd.numSlip,), dtype=np.float32)
     print("\tOutput shape:", gnd_ss.shape)
-
-    print("\n-> Starting parallel computation")
-    n_processors = get_num_jobs()
-    if args.test:
-        print("Terminating the calculation, this was a test run.")
-        v = gnd.compute(coords[0])
-        print("Total GND density for the first point:", v[0])
-        exit()
-
-    
-    with mpire.WorkerPool(n_jobs=n_processors, start_method="spawn") as pool:
-        results = pool.imap(gnd.compute, coords, progress_bar=True)
-
-    gnd.unpack_data(results)
-    print("\t-> Calculation complete. Unpacking results...")
     
     # Now pack in the data, accounting for the slices
     gnd_sr[slice_x1, slice_x2, slice_x3] = gnd.GND_SR

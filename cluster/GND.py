@@ -1,24 +1,31 @@
 import numpy as np
-from scipy.optimize import minimize
+from scipy.optimize import minimize, lsq_linear, nnls, least_squares
 
 class GND:
-    def __init__(self, cs, burgers, slip_systems):
+    def __init__(self, cs: int, burgers: float, slip_systems: str):
+        """Class to perform GND calculations on a microstructure.
+        Inputs:
+            cs: int, crystal structure (1: FCC, 2: BCC, 3: HCP)
+            burgers: float, burgers vector magnitude in angstroms
+            slip_systems: str, slip systems to use for BCC ('screw+110', 'screw+112', 'screw+123', 'screw+110+112', 'all') and HCP ('basal', 'basal+prismatic', 'all')
+        Returns:
+            None"""
         self.cs = cs
         self.burgers = burgers * 1e-10
-        self.set_A_matrix(slip_systems.strip())
+        self.set_A_matrix(slip_systems.strip().replace(" ", "").lower())
         self.get_crystallography()
         self.get_symmetry_operators()
     
     def set_A_matrix(self, slip_systems):
         # For BCC: 'screw + 110', 'screw + 112', 'screw + 123', 'screw + 110 + 112', 'all'
         if self.cs == 2:
-            if slip_systems == 'screw + 110':
+            if slip_systems == 'screw+110':
                 self.A_matrix_choice = 1
-            elif slip_systems == 'screw + 112':
+            elif slip_systems == 'screw+112':
                 self.A_matrix_choice = 2
-            elif slip_systems == 'screw + 123':
+            elif slip_systems == 'screw+123':
                 self.A_matrix_choice = 3
-            elif slip_systems == 'screw + 110 + 112':
+            elif slip_systems == 'screw+110+112':
                 self.A_matrix_choice = 4
             elif slip_systems == 'all':
                 self.A_matrix_choice = 5
@@ -28,7 +35,7 @@ class GND:
         elif self.cs == 3:
             if slip_systems == 'basal':
                 self.A_matrix_choice = 1
-            elif slip_systems == 'basal + prismatic':
+            elif slip_systems == 'basal+prismatic':
                 self.A_matrix_choice = 2
             elif slip_systems == 'all':
                 self.A_matrix_choice = 3
@@ -78,6 +85,7 @@ class GND:
         x3 = coords[2].astype(int)
 
         # no calculations if inside void or outside microstructure
+        if verbose: print("Position:", (x1, x2, x3), "ID:", self.featIDs[x1, x2, x3], "GAO:", self.GAO[:, :, x1, x2, x3])
         if self.GAO[:, :, x1, x2, x3].sum() != 0 and self.featIDs[x1, x2, x3] != 0:
             # Determine what neighborhood the point has
             XenvCompleteness, YenvCompleteness, ZenvCompleteness = self._determine_neighborhood(self.featIDs, x1, x2, x3)
@@ -99,10 +107,14 @@ class GND:
             totalGNDdensitySR = np.abs(ddSR).sum()
             ddSR = np.abs(ddSR).T
             if verbose:
+                print("Completeness: ", XenvCompleteness, YenvCompleteness, ZenvCompleteness)
                 print("dthe: ", dthe)
+                print("avg_misori: ", avg_misori)
+                print("Diffoperators: ", diffOperatorX, diffOperatorY, diffOperatorZ)
                 print("kappaSR: ", kappaSR)
                 print("kappaSRprime: ", kappaSRprime)
                 print("alphaSR: ", alphaSR)
+                print("ddSR: ", ddSR)
                 print("totalGNDdensitySR: {:.2e}".format(totalGNDdensitySR))
         else:
             # tame output for voxels where misorientation can't be calc
@@ -198,7 +210,6 @@ class GND:
         # BCC
         if self.cs == 2:
             A_bcc = self._BCC_A_matrix_generationV2()
-            # A_matrix_choice = int(input('1: screw + [110]\n2: screw + [112]\n3: screw + [123]\n4: screw + [110] + [112]\n5: screw + [110] + [112] + [123]\n'))
             if self.A_matrix_choice == 1:
                 a_bcc = np.float64(A_bcc[:, :16])
                 numModes = 2
@@ -221,7 +232,6 @@ class GND:
         # HCP
         elif self.cs == 3:
             d1, d2, d3, d4, d5 = self._HCP_A_matrix_mk3()
-            # A_matrix_choice = int(input('1: basal\n2: basal + prismatic\n3: basal + prismatic + pyramidal(c+a)\n'))
             if self.A_matrix_choice == 1:
                 A_hcp = np.array([d1, d2])
                 numModes = 2
@@ -427,7 +437,10 @@ class GND:
                 else:
                     dd = dd/burgers
             else:
-                dd = B.dot(Lambda)/burgers  # explicitly solve for FCC dislocation density with linear operator
+                # explicitly solve for FCC dislocation density with linear operator
+                dd = B.dot(Lambda)/burgers  # same as matmul
+                # dd = np.linalg.lstsq(B.T, Lambda.reshape(-1), rcond=None)[0] / burgers  # same as lsq_linear
+                # dd = nnls(B.T, Lambda.reshape(-1))[0] / burgers
         elif scheme == 'l1':
             raise NotImplementedError('L1 minimization not implemented yet')
             if cs == 2 or cs == 3:
