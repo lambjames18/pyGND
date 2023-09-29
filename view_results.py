@@ -53,9 +53,14 @@ class InteractiveSlider:
 
 # name = "R2S10S5"
 # name = "CoNiS29S2"
-name = "R2S9S4"
+# name = "R2S9S4"
 # name = "CoNi16"
 # name = "CoNi90"
+# name = "IN718EBM"
+# name = "TaAMSpalled"
+# name = "CoNiS29S2End"
+# name = "TaAM"
+name = "CoNi67"
 sr = np.load(f"./output_data/{name}_GND_SR.npy")
 # ss = np.load(f"./output_data/{name}_GND_SS.npy")
 # ms = np.load(f"./output_data/{name}_misori.npy")
@@ -64,7 +69,7 @@ sr = np.load(f"./output_data/{name}_GND_SR.npy")
 sr = np.log10(sr, where=sr > 0)
 
 print(sr.shape)
-# sr = np.swapaxes(sr, 1, 0)
+sr = np.swapaxes(sr, 1, 0)
 
 # sr_data = np.zeros((200, sr.shape[0]))
 # for i in range(sr.shape[0]):
@@ -83,7 +88,7 @@ print(sr.shape)
 # plt.show()
 # exit()
 
-mn, mx = np.percentile(sr[sr > 0], (2.0, 95.0))
-# mn, mx = sr[sr > 0].min(), sr[sr > 0].max()
+# mn, mx = np.percentile(sr[sr > 0], (2.0, 95.0))
+mn, mx = sr[sr > 0].min(), sr[sr > 0].max()
 print(mn, mx)
 InteractiveSlider(sr, vmin=mn, vmax=mx, cmap="jet")
