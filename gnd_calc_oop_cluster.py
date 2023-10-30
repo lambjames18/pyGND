@@ -74,9 +74,11 @@ def get_num_jobs():
     # Determine what the operating system is
     operating_system = sys.platform
     if operating_system in ["darwin", "win32", "cygwin", "msys"]:
-        n_cpus = int(os.cpu_count() / 2)
-        n_cpus = 3
+        print("\t-> This is a mac or windows system, determining the number of available processors.")
+        n_cpus = int(os.cpu_count() - 2)
+        # n_cpus = 2
     else:
+        print("\t-> This is a linux system, determining the number of available processors.")
         n_cpus = len(os.sched_getaffinity(0))
     print("\t{} processors will be utilized.".format(n_cpus))
     return n_cpus
