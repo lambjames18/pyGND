@@ -57,6 +57,8 @@ def main(path):
     # Apply a global cropping
     slice_x1, slice_x2, slice_x3 = pf.determine_slicing(featIDs, verbose=False)
     # slice_x1, slice_x2, slice_x3 = (slice(None, 100), slice(None, 100), slice(None, 100))
+    # slice_x1, slice_x2, slice_x3 = (slice(None), slice(None), slice(None))
+    print("\tSlicing:", slice_x1, slice_x2, slice_x3)
     featIDs = featIDs[slice_x1, slice_x2, slice_x3]
     euler = euler[slice_x1, slice_x2, slice_x3]
     print("\tNumber of points (after crop):", featIDs.size)
@@ -75,7 +77,7 @@ def get_num_jobs():
     operating_system = sys.platform
     if operating_system in ["darwin", "win32", "cygwin", "msys"]:
         print("\t-> This is a mac or windows system, determining the number of available processors.")
-        n_cpus = int(os.cpu_count() - 2)
+        n_cpus = int(os.cpu_count() - 5)
         # n_cpus = 2
     else:
         print("\t-> This is a linux system, determining the number of available processors.")

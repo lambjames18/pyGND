@@ -5,11 +5,11 @@
 import sys
 import os
 import numpy as np
-import h5py
 import mpire
 import configparser
 import argparse
 
+import segment_grains as sg
 import py_functions as pf
 import GND
 
@@ -63,7 +63,9 @@ def read_ang(path):
         
     out = {col_names[i]: data[:, :, i] for i in range(n_entries)}
     eulerangles = np.array([out["phi1"], out["PHI"], out["phi2"]]).T.astype(float)
-    featIDs = np.ones(eulerangles.shape[:2], dtype=int)
+    featIDs = sg.segment(eulerangles, angle_threshold=5)
+    eulerangles = eulerangles.reshape(1, *eulerangles.shape)
+    featIDs = featIDs.reshape(1, *featIDs.shape)
     spacing = np.array([res, res, res])
     return eulerangles, featIDs, spacing
 
@@ -111,9 +113,9 @@ if __name__ == '__main__':
     config_exists = os.path.isfile(args.config)
     d3d_exists = os.path.isfile(path)
     save_exists = os.path.isdir(directory)
-    if not config_exists: raise ValueError("The config file does not exist.")
-    if not d3d_exists: raise ValueError("The DREAM3D file does not exist.")
-    if not save_exists: raise ValueError("The save directory does not exist.")
+    if not config_exists: raise ValueError("The config file does not exist: {}".format(args.config))
+    if not d3d_exists: raise ValueError("The DREAM3D file does not exist: {}".format(path))
+    if not save_exists: raise ValueError("The save directory does not exist: {}".format(directory))
     print("\t-> All inputs are valid.")
     print("\n-> Calling setup function")
     full_shape, cropped_shape, (slice_x1, slice_x2, slice_x3), featIDs, euler, coordinates, spacing = main(path)
