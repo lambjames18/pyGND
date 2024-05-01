@@ -4,38 +4,9 @@
 % MODIFIED FOR CLUSTER USE. WILL SEARCH CURRENT WORKING DIRECTORY. %%%%%%%%
 % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%filenameData = '//192.168.0.102/general/MATLAB_common/GND_Matlab/CoNi_Feature1_zyx-eulersFZ_wholedata.csv';
-%filenameIDs = '//192.168.0.102/general/MATLAB_common/GND_Matlab/CoNi_Feature1_IDs_zyx-eulersFZ_wholedata.csv';
-%filenameData = '//192.168.0.201/data/MATLAB_common/GND_Matlab/3Feature1_zyx-eulersFZ_wholedata.csv';
-%filenameIDs = '//192.168.0.201/data/MATLAB_common/GND_Matlab/3Feature1_IDs_zyx-eulersFZ_wholedata.csv';
-%filenameData = '//192.168.0.201/data/MATLAB_common/GND_Matlab/r5_3pct_Feature1_zyx-eulersFZ_wholedata.csv';
-%filenameIDs = '//192.168.0.201/data/MATLAB_common/GND_Matlab/r5_3pct_Feature1_IDs_zyx-eulersFZ_wholedata.csv';
-%filenameData = '//192.168.0.201/data/MATLAB_common/GND_Matlab/r2_3pct_Feature1_zyx-eulersFZ_wholedata.csv';
-%filenameIDs = '//192.168.0.201/data/MATLAB_common/GND_Matlab/r2_3pct_Feature1_IDs_zyx-eulersFZ_wholedata.csv';
-%filenameData = '//192.168.0.201/data/MATLAB_common/GND_Matlab/SpallTaFeature1_zyx-eulersFZ_wholedata.csv';
-%filenameIDs = '//192.168.0.201/data/MATLAB_common/GND_Matlab/SpallTaFeature1_IDs_zyx-eulersFZ_wholedata.csv';
-%filenameData = '//192.168.0.201/data/MATLAB_common/GND_Matlab/Spall_AM_TaFeature1_zyx-eulersFZ_wholedata.csv';
-%filenameIDs = '//192.168.0.201/data/MATLAB_common/GND_Matlab/Spall_AM_TaFeature1_IDs_zyx-eulersFZ_wholedata.csv';
-%filenameData = 'Ti73pctFeature1_zyx-eulersFZ_wholedata.csv';
-%filenameIDs = 'Ti73pctFeature1_IDs_zyx-eulersFZ_wholedata.csv';
-%filenameData = 'Ti71pctFeature1_zyx-eulersFZ_wholedata.csv';
-%filenameIDs = 'Ti71pctFeature1_IDs_zyx-eulersFZ_wholedata.csv';
-%filenameData = '//192.168.0.201/data/MATLAB_common/GND_Matlab/AlNiCoFeature1_zyx-eulersFZ_wholedata.csv';
-%filenameIDs = '//192.168.0.201/data/MATLAB_common/GND_Matlab/AlNiCoFeature1_IDs_zyx-eulersFZ_wholedata.csv';
-%filenameData = '//192.168.0.102/general/MATLAB_common/GND_Matlab/316L-refined.csv';
-%filenameData = 'Bicrystal2Feature1_zyx-eulersFZ_wholedata.csv';
-%filenameIDs = 'Bicrystal2Feature1_IDs_zyx-eulersFZ_wholedata.csv';
-%filenameIDs = 'synth16_Feature1_IDs_zyx-eulersFZ_wholedata.csv';
-%filenameData = 'synth16_Feature1_zyx-eulersFZ_wholedata.csv';
-%filenameIDs = 'R2S10S5_GrainIDs.csv';
-%filenameData = 'R2S10S5_Data.csv';
-filenameIDs = 'D:\\Research\\scripts\\TriBeam_GND\\TaAMSpalled_mini_GrainIDs.csv';
-filenameData = 'D:\\Research\\scripts\\TriBeam_GND\\TaAMSpalled_mini_Data.csv';
+filenameIDs = 'D:\\Research\\scripts\\TriBeam_GND\\matlab_code\\TaAMSpalled_mini_MatlabInput-FeatureIDs.csv';
+filenameData = 'D:\\Research\\scripts\\TriBeam_GND\\matlab_code\\TaAMSpalled_mini_MatlabInput-Microstructure.csv';
 
-%filenameFeatData = '//192.168.0.102/general/MATLAB_common/GND_Matlab/CoNi16_FZ_featuredata.csv';
-%Directory = 'D:/IMMI Work/Final_output/1pct_r15_addtl_2pct/';
-%filenameData = [Directory 'Ti7_1pct_160_Feature1_zyx-eulersFZ_wholedata.csv'];
-%filenameIDs = [Directory 'Ti7_1pct_160_Feature1_IDs_zyx-eulersFZ_wholedata.csv'];
 
 
 micro = datastore(filenameData);
@@ -44,9 +15,9 @@ featureData = 0;
 GrainIDs = datastore(filenameIDs);
 %GrainIDs = ;
 
-X_scaling = 0.5;
-Y_scaling = 0.5;
-Z_scaling = 0.5;
+X_scaling = 1.5;
+Y_scaling = 1.5;
+Z_scaling = 1.5;
 
 % if resolution of TriBeam data was adjusted
 reduction = 1; 

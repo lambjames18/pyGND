@@ -25,11 +25,11 @@ import matplotlib.pyplot as plt
 # name = "IN718EBM"
 # name = "CoNi16"
 # name = "TaSpalled"
-# name = "TaAMSpalled"
+name = "TaAMSpall"
 # name = "TaAM"
 # # name = "CoNi67"
 # name = "R2S10S1"
-name = "Ta001Simulation"
+# name = "Ta001Simulation"
 sr = np.load(f"./output_data/{name}_GND_SR.npy")
 # ss = np.load(f"./output_data/{name}_GND_SS.npy")
 # ms = np.load(f"./output_data/{name}_misori.npy")
@@ -43,7 +43,7 @@ sr = np.load(f"./output_data/{name}_GND_SR.npy")
 # sample = "CoNi_90"
 # sample = "IN718"
 # sample = "CoNi_16"
-# sample = "Ta"
+sample = "Ta"
 # sample = "CoNi67"
 # fname = "Raster_Start_Isotropic"
 # fname = "Raster_End_Isotropic"
@@ -51,8 +51,8 @@ sr = np.load(f"./output_data/{name}_GND_SR.npy")
 # fname = sample + "_Isotropic"
 # fname = "new/" + name
 # fname = sample
-# h = h5py.File(f"D:/Research/{sample}/Data/3D/{fname}.dream3d", "r+")
-h = h5py.File(f"D:/Research/Ta/Data/3D/AMSpall/Simulation/Ta001.dream3d", "r+")
+name = "AMSpall/" + name
+h = h5py.File(f"D:/Research/{sample}/Data/3D/{name}.dream3d", "r+")
 # print(h["DataContainers/ImageDataContainer/CellData"].keys())
 # exit()
 assert h["DataContainers/ImageDataContainer/CellData/GND"].dtype == sr.dtype

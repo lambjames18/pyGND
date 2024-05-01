@@ -2,16 +2,20 @@
 % decide which crystallography is relevant for material of interest
 % includes burgers vector mag, linear operator B, or A matrix -------------
 
-%cs = input('Input crystallography: \n 1: FCC \n 2: BCC \n 3: HCP\n\n');
-fprintf('Input crystallography:\n')
-cs = 1;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% USER INPUT
 
-%define burgers vector magnitude
-%burgers = input(['Input Burgers Vector (A): \n2.86A for Tantalum BCC'...
-%    '\n2.5A for IN718 & AlNiCo9\n2.95A for Ti'...
-%    '\n   A for CoNi\n\n']);
-fprintf('Burgers (A):\n')
-burgers = 2.5;
+cs = 2; % Crystallography (1 FCC, 2 BCC, 3 HCP)
+
+burgers = 2.86; % Burgers vector magnitude (Ta 2.86 Angstroms)
+
+A_matrix_choice = 1; % A matrix selection for BCC or HCP, determines which slip systems are active
+% BCC options-> 1: screw+[110], 2: screw+[112], 3: screw+[123], 4: screw+[110]+[112], 5: screw+[110]+[112]+[123]
+% HCP options-> 1: basal, 2: basal+prismatic, 3: basal+prismatic+pyramidal(c+a)
+% FCC options-> doesn't matter, always uses all slip systems
+
+%% END USER INPUT
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % generate full A matrices
 BCC_A_matrix_generationV2
@@ -45,12 +49,9 @@ B = [a,7*c,-13*c,-7*c,-a,13*c,c,-c,0;
     5*d,-f,0,-f,5*d,0,0,0,-d;
     5*d,0,-f,0,-d,0,-f,0,5*d;
     -d,0,0,0,5*d,-f,0,-f,5*d];
-    
-% prompt user based on xtal selection
+
+
 if(cs == 2)
-    fprintf('Include which slip modes?\n');
-    %A_matrix_choice = input('1: screw + [110]\n2: screw + [112]\n3: screw + [123]\n4: screw + [110] + [112]\n5: screw + [110] + [112] + [123]\n');
-    A_matrix_choice = 5
     switch A_matrix_choice
         case 1
             a_bcc = double(A_bcc(:,1:16));
@@ -80,9 +81,6 @@ if(cs == 2)
     [numNye,numSlip] = size(A_sparse);
     
 elseif(cs == 3)
-    fprintf('Include which slip modes? \n');
-    %A_matrix_choice = input('1: basal\n2: basal + prismatic\n3: basal + prismatic + pyramidal(c+a)\n');
-    A_matrix_choice = 3
     switch A_matrix_choice
         case 1
             A_hcp = [d1 d2];
@@ -98,19 +96,12 @@ elseif(cs == 3)
             numModes = 5;
     end
     
-    % 0.295nm for Ti 
-    % burgers = 2.95E-10;
+
     A_sparse = sparse(A_hcp);
     [numNye,numSlip] = size(A_sparse);
     
 else
-    %fprintf('Defaulting to FCC.');
-
-    %.25nm, see by neutron diffraction via Zhang et. al.
-    % burgers = 2.5E-10;
     A_sparse = zeros(9,18); %dummy variable
-    
-    %defining number of slip systems and slip modes
     numSlip = 18;
     numModes = 4;
     

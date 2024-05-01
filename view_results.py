@@ -51,7 +51,7 @@ class InteractiveSlider:
         self.im.axes.figure.canvas.draw()
         self.fig.canvas.draw_idle()
 
-sr = np.load("D:/Research/scripts/TriBeam_GND/output_data/Ta111_090_GND_SR.npy")
+sr = np.load("D:/Research/scripts/TriBeam_GND/output_data/TaSpalled_3SS_GND_SR.npy")
 
 sr = np.log10(sr, where=sr > 0)
 
