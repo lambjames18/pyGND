@@ -107,22 +107,12 @@ if __name__ == '__main__':
     coords = list(coordinates)
 
     print("\n-> Starting parallel computation")
-    n_processors = get_num_jobs()
+    gnd.preflight()
     if args.test:
         print("Terminating the calculation, this was a test run.")
-        index = len(coords) // 4
-        while True:
-            if gnd.featIDs[coords[index][0], coords[index][1], coords[index][2]] != 0:
-                break
-            else:
-                index += 1
-        v = []
-        for i in range(10):
-            v.append(gnd.compute(coords[index + i])[0])
-        print("Total GND density for 10 points in the volume: {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}".format(*v))
         exit()
 
-    
+    n_processors = get_num_jobs()
     with mpire.WorkerPool(n_jobs=n_processors, start_method="spawn") as pool:
         results = pool.map(gnd.compute, coords, progress_bar=True)
 

@@ -1,21 +1,47 @@
 import numpy as np
-from scipy.optimize import minimize, lsq_linear, nnls, least_squares
+from scipy.optimize import linprog
 
 class GND:
-    def __init__(self, cs: int, burgers: float, slip_systems: str):
+    def __init__(self, cs: int, burgers: float, slip_systems: str, G: float, nu: float, scheme="l2"):
         """Class to perform GND calculations on a microstructure.
         Inputs:
             cs: int, crystal structure (1: FCC, 2: BCC, 3: HCP)
             burgers: float, burgers vector magnitude in angstroms
             slip_systems: str, slip systems to use for BCC ('screw+110', 'screw+112', 'screw+123', 'screw+110+112', 'all') and HCP ('basal', 'basal+prismatic', 'all')
+            G: float, shear modulus in GPa
+            nu: float, Poisson's ratio
         Returns:
             None"""
         self.cs = cs
         self.burgers = burgers * 1e-10
+        self. G = G
+        if self.G is not None:
+            self.G *= 1e9
+        self.nu = nu
+        self.scheme = scheme
         self.set_A_matrix(slip_systems.strip().replace(" ", "").lower())
         self.get_crystallography()
         self.get_symmetry_operators()
-    
+
+    def preflight(self):
+        if self.scheme == "l1" and (self.G is None or self.nu is None):
+            raise ValueError("Shear modulus and Poisson's ratio must be provided for the L1 scheme.")
+        if self.coordinates is None or self.euler_angles is None or self.featIDs is None or self.spacing is None:
+            raise ValueError("Data has not been set.")
+        if self.coordinates.shape[0] != self.euler_angles.shape[0] or self.coordinates.shape[0] != self.featIDs.size:
+            raise ValueError("Data is not the same size.")
+        if self.A is None or self.B is None:
+            raise ValueError("Crystallography has not been set.")
+        if self.symOp is None:
+            raise ValueError("Symmetry operators have not been set.")
+        # Check 10 random points to see if the data is in the correct format
+        for i in range(10):
+            idx = np.random.randint(0, self.coordinates.shape[0])
+            point_coords = self.coordinates[idx]
+            density = self.compute(point_coords)
+            print(f"Point: {point_coords} (ID {self.featIDs[idx]}), Density: {density:.2e}")
+        print("Preflight checks complete.")
+
     def set_A_matrix(self, slip_systems):
         # For BCC: 'screw + 110', 'screw + 112', 'screw + 123', 'screw + 110 + 112', 'all'
         if self.cs == 2:
@@ -327,7 +353,6 @@ class GND:
 
         return (Xenv, Yenv, Zenv)
         
-
     def _deltathetakV5(self, gA, gB, symOp):
         gA = gA.astype(np.float64)
         gB = gB.astype(np.float64)
@@ -373,7 +398,6 @@ class GND:
             disori = np.around(np.abs(misori_matrix[d_col].diagonal()), 6)
             return (disori[0], disori[1], disori[2])
 
-
     def _determine_dthe(self, XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x1, x2, x3, symOp):
         environment_case = {'forward': self._deltathetakV5, 'backward': self._deltathetakV5, 'central': self._deltathetakV5, 'constant': lambda *args: [0.0, 0.0, 0.0]}
 
@@ -411,22 +435,19 @@ class GND:
         dthe[:, 2] = environment_case[ZenvCompleteness](gz1, gz2, symOp)
         return dthe, diffOperatorX, diffOperatorY, diffOperatorZ
 
-
     def _determine_kappaV5(self, dthe, diffOperators, spacing):
         # kappa must be calculated for material point
         kappa = dthe / (diffOperators * spacing)
         return kappa
 
-
-    def _minimize(self, alpha, cs, A, B, burgers, scheme='l2'):
+    def _minimize(self, alpha, cs, A, B, burgers):
         # Equation to be solved -> A*rho[array form] = Lambda[Nye in array form] 
         # Solve: A*rho = Lambd
         # Nye tensor must be converted into array form Lambda
         Lambda = alpha.reshape(-1, 1)  # Shape (9x1)
-        if scheme == 'l2':
+        if self.scheme == 'l2':
             if cs == 2 or cs == 3:
                 # two steps to solve via minimize‖Ax−b‖2
-                #[c,R] = qr(transpose(A_sparse),transpose(Lambda))
                 B = A.T.dot(np.linalg.inv(A.dot(A.T)))
                 dd = B.dot(Lambda)
                 if self.numSlip > 9 & cs == 3:
@@ -437,17 +458,14 @@ class GND:
                 else:
                     dd = dd/burgers
             else:
-                # explicitly solve for FCC dislocation density with linear operator
                 dd = B.dot(Lambda)/burgers  # same as matmul
-                # dd = np.linalg.lstsq(B.T, Lambda.reshape(-1), rcond=None)[0] / burgers  # same as lsq_linear
-                # dd = nnls(B.T, Lambda.reshape(-1))[0] / burgers
-        elif scheme == 'l1':
-            raise NotImplementedError('L1 minimization not implemented yet')
-            if cs == 2 or cs == 3:
-                pass
-            else:
-                pass
-                
+        elif self.scheme == 'l1':
+            c = (np.ones(A.shape[1]) * self.G * burgers**2 / (4 * np.pi))
+            c[:12] *= (1 - self.nu)**(-1)
+            optimum = linprog(c, A_eq=A, b_eq=Lambda, bounds=(0, None))
+            dd = optimum.x / burgers
+        else:
+            raise ValueError("Minimization scheme not recognized. Please choose either 'l1' or 'l2'")
         return dd
 
 
@@ -510,7 +528,6 @@ class GND:
         edges = d[:, 4:]
         A_bcc = np.hstack((screws.astype(float), edges.astype(float)))
         return A_bcc
-
 
     def _HCP_A_matrix_mk3(self):
         # Relevant Direcitons in [uvtw] notation
@@ -703,7 +720,6 @@ class GND:
         # systems to contribute to A matrix
         return (d1, d2, d3, d4, d5)
 
-
     def _determine_dthe_slow(self, XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x1, x2, x3, symOp):
 
         # determine misorientation and kappa based on material point neighborhood
@@ -820,7 +836,6 @@ class GND:
             dthe[2, 2] = 0 
         return dthe, diffOperatorX, diffOperatorY, diffOperatorZ
 
-
     def _deltathetak_original(self, gA, gB, k, symOp):
         self._latestgA = gA
         self._latestgB = gB
@@ -868,7 +883,6 @@ class GND:
             d_col = np.argmin(np.abs(misori_matrix))
             disori = np.abs(misori_matrix[d_col])
             return disori
-
 
     def _determine_neighborhood_old(self, featIDs, x1, x2, x3):
         # checking completeness of the voxel neighborhood in x dimension
