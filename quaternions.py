@@ -334,59 +334,7 @@ def qu_log(q: np.ndarray) -> np.ndarray:
     return v
 
 
-def qu_disorientation(q1: np.ndarray, q2: np.ndarray, laue_id=11) -> np.ndarray:
-    """Calculate the disorientation quaternion between two quaternions."""
-    S = laue_elements(laue_id)
-    # Make sure the quaternions are unit quaternions
-    q1 = qu_norm_std(q1)  # (4,)
-    q2 = qu_norm_std(q2)  # (4,)
-    # Symmetrize the quaterions
-    q1_sym = qu_prod(S, q1)  # (24, 4)
-    q2_sym = qu_prod(S, q2)  # (24, 4)
-    # Calculate the misorientation quaternions
-    q1_sym_inv = qu_conj(q1_sym)
-    q2_sym_inv = qu_conj(q2_sym)
-    qmis = qu_prod(q1_sym[None], q2_sym_inv[:, None]).reshape(-1, 4)
-    # qmis = qu_prod(q2_sym[None], q1_sym_inv[:, None]).reshape(-1, 4)
-    angles = qu_angle(qmis)
-    qdis = qmis[np.isclose(angles, angles.min())]
-
-    # TODO: This function just returns the first disorientation quaternion found.
-    # It should return the disorientation that is closes to the misorientation
-    # fundamental zone.
-
-    # qdis = np.unique(qdis, axis=0)
-
-    return qdis[0]
-
-def is_in_fundamental_zone(axangle):
-    """Check if quaternion represents rotation in fundamental zone for cubic symmetry."""
-    angle = np.rad2deg(axangle[..., 3])
-    axis = axangle[..., :3]
-    
-    # First check overall angle constraint
-    if angle > 62.8:
-        return False
-    
-    # Check special direction constraints
-    # For [001]
-    if np.abs(np.dot(axis, np.array([0, 0, 1]))) > 0.999:  # Allow small numerical error
-        return angle <= 45.0
-    
-    # For [110]
-    axis_110 = np.array([1, 1, 0]) / np.sqrt(2)
-    if np.abs(np.dot(axis, axis_110)) > 0.999:
-        return angle <= 60.0
-    
-    # For [111]
-    axis_111 = np.array([1, 1, 1]) / np.sqrt(3)
-    if np.abs(np.dot(axis, axis_111)) > 0.999:
-        return angle <= 60.0
-    
-    return True
-
-
-def disorientation_naive(
+def qu_disorientation(
     quats1: np.ndarray, quats2: np.ndarray, laue_id_1: int, laue_id_2: int
 ):
     """
@@ -662,19 +610,7 @@ if __name__ == "__main__":
     qu1_s = qu_prod(laue_elements(11), qu1)
     qu2_s = qu_prod(laue_elements(11), qu2)
 
-
-
     dis = qu_disorientation(qu1, qu2)
-    angle = qu_angle(dis)
-    axis = qu_axis(dis)
-    print("Disorientation quaternion:")
-    print(dis, "\n")
-    print("Disorientation axis:")
-    print(axis, "\n")
-    print("Disorientation angle:")
-    print(np.rad2deg(angle), "\n")
-
-    dis = disorientation_naive(qu1, qu2, 11, 11)
     angle = qu_angle(dis)
     axis = qu_axis(dis)
     print("Disorientation quaternion:")
