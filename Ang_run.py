@@ -17,6 +17,7 @@ parser = argparse.ArgumentParser(prog='GND Calculations',
                                  description='Determine the spatial distribution of GND densities in EBSD datasets using crystallography and misorientation.',
                                  epilog='Original GND calculations were developed by Wyatt Wytzen, the python adaptation was developed by James Lamb.')
 parser.add_argument("-c", "--config", required=True,  help="The .ini file containing the calculation configuration")
+parser.add_argument("--segment", action='store_true', help="Perform grain segmentation on the dataset. Otherwise, assume all points are of the same grain.")
 parser.add_argument("-t", "--test", action='store_true', help="Terminate the code prior to excecuting parallel computations. Useful for guaranteeing that the script is setup properly.")
 args = parser.parse_args()
 
@@ -28,13 +29,14 @@ ID = config["PARAMS"]["ID"]
 burgers = float(config["PARAMS"]["Burgers"])
 cs = config["PARAMS"]["Crystallography"]
 slip_systems = config["PARAMS"]["Slip Systems"]
+minimization = config["PARAMS"]["Minimization"]
 
 if cs.lower() == 'fcc': cs = 1
 elif cs.lower() == 'bcc': cs = 2
 elif cs.lower() == 'hcp': cs = 3
 else: raise ValueError("The crystallography entry in the config file was not one of the following ['fcc', 'bcc', 'hcp'].")
 
-def read_ang(path):
+def read_ang(path, segment=False):
     """Reads an ang file into a numpy array"""
     num_header_lines = 0
     col_names = None
@@ -63,16 +65,20 @@ def read_ang(path):
         
     out = {col_names[i]: data[:, :, i] for i in range(n_entries)}
     eulerangles = np.array([out["phi1"], out["PHI"], out["phi2"]]).T.astype(float)
-    featIDs = sg.segment(eulerangles, angle_threshold=5)
+    if segment:
+        featIDs = sg.segment(eulerangles, angle_threshold=5)
+    else:
+        featIDs = np.ones(eulerangles.shape[:-1], dtype=int)
     eulerangles = eulerangles.reshape(1, *eulerangles.shape)
     featIDs = featIDs.reshape(1, *featIDs.shape)
     spacing = np.array([res, res, res])
     return eulerangles, featIDs, spacing
 
-def main(path):
+def main(path, segment=False):
     # Read data
-    euler, featIDs, spacing = read_ang(path)
-    print("\tSpacing:", spacing)
+    euler, featIDs, spacing = read_ang(path, segment=segment)
+    spacing *= 1e-6
+    print("\tSpacing (m):", spacing)
     print("\tTotal number of points:", featIDs.size)
     print("\tDataset shape:", featIDs.shape)
     full_shape = featIDs.shape
@@ -106,7 +112,7 @@ def get_num_jobs():
     print("\t{} processors will be utilized.".format(n_cpus))
     return n_cpus
 
-
+np.set_printoptions(linewidth=200)
 if __name__ == '__main__':
     print("\n*** GND Calculations Python Script ***")
     print("Inputs:\n\tConfig File: {}\n\tTest Run: {}\n\tDREAM3D File: {}\n\tID: {}\n\tBurgers Vector: {}\n\tCrystallography: {}\n\tSave Folder: {}".format(args.config, args.test, path, ID, burgers, cs, directory))
@@ -116,12 +122,13 @@ if __name__ == '__main__':
     if not config_exists: raise ValueError("The config file does not exist: {}".format(args.config))
     if not d3d_exists: raise ValueError("The DREAM3D file does not exist: {}".format(path))
     if not save_exists: raise ValueError("The save directory does not exist: {}".format(directory))
+    print("\t-> Grain segmentation to be performed:", args.segment)
     print("\t-> All inputs are valid.")
     print("\n-> Calling setup function")
-    full_shape, cropped_shape, (slice_x1, slice_x2, slice_x3), featIDs, euler, coordinates, spacing = main(path)
+    full_shape, cropped_shape, (slice_x1, slice_x2, slice_x3), featIDs, euler, coordinates, spacing = main(path, segment=args.segment)
 
     print("\n-> Creating GND object")
-    gnd = GND.GND(cs, burgers, slip_systems)
+    gnd = GND.GND(cs, burgers, slip_systems, minimization=minimization)
     gnd.set_data(coordinates, euler, featIDs, spacing)
     gnd.enforce_mask_on_input(gnd.featIDs == 0)
     print("\tNumber of slip systems:", gnd.numSlip)
@@ -138,14 +145,32 @@ if __name__ == '__main__':
             else:
                 index += 1
         v = []
-        for i in range(10):
-            v.append(gnd.compute(coords[index + i])[0])
-        print("Total GND density for 10 points in the volume: {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}".format(*v))
+        # for i in range(1):
+        #     v.append(gnd.compute(coords[index + i], verbose=True)[0])
+        eu1 = gnd.euler_angles[coords[index][0], coords[index][1], coords[index][2]]
+        eu2 = gnd.euler_angles[coords[index + 1][0], coords[index + 1][1], coords[index + 1][2]]
+        import rotations
+        qu1 = rotations.eu2qu(eu1)
+        qu2 = rotations.eu2qu(eu2)
+        print("Quat1", qu1, "Euler1", np.rad2deg(eu1))
+        print("Quat2", qu2, "Euler2", np.rad2deg(eu2))
+        import quaternions
+        dis = quaternions.qu_disorientation(qu1, qu2)
+        print("Disorientation", dis)
+        exit()
+
+        dds, mis, dd = gnd.compute(coords[index])
+        print(f"Compute: {dds:.3e} ({mis:.6f} deg)")
+        dds, mis, dd = gnd.test(coords[index])
+        print(f"Test: {dds:.3e} ({mis:.6f} deg)")
+        # print("Total GND density for 10 points in the volume: {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}".format(*v))
+        # print("Total GND density for 10 points in the volume: {:.2e}".format(*v))
         exit()
 
     
     with mpire.WorkerPool(n_jobs=n_processors, start_method="spawn") as pool:
-        results = pool.map(gnd.compute, coords, progress_bar=True)
+        results = pool.map(gnd.test, coords, progress_bar=True)
+        # results = pool.map(gnd.compute, coords, progress_bar=True)
 
     gnd.unpack_data(results)
     print("\t-> Calculation complete.")
@@ -161,6 +186,18 @@ if __name__ == '__main__':
     gnd_sr[slice_x1, slice_x2, slice_x3] = gnd.GND_SR
     gnd_ms[slice_x1, slice_x2, slice_x3] = gnd.misori
     gnd_ss[slice_x1, slice_x2, slice_x3] = gnd.GND_SS
+
+    print("Mis", np.rad2deg(np.nanmin(gnd_ms)), np.rad2deg(np.nanmax(gnd_ms)))
+    print("SR", gnd_sr.min() / 1e12, gnd_sr.max() / 1e12)
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots(1, 2, figsize=(12, 6), sharex=True, sharey=True)
+    ax[0].imshow(gnd_sr[0].T / 1e12, cmap='RdBu_r', vmax=1000)
+    ax[0].set_title("GND_SR")
+    ax[1].imshow(np.rad2deg(gnd_ms[0].T), cmap='jet', vmin=0.0, vmax=4.89)
+    ax[1].set_title("Misorientation")
+    plt.tight_layout()
+    plt.show()
+    exit()
         
     print("\t-> Saving data.")
     np.save(directory + ID + "_GND_SR.npy", gnd_sr)

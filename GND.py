@@ -1,8 +1,13 @@
+from typing import Tuple
+from math import ceil
 import numpy as np
-from scipy.optimize import linprog
+from scipy import optimize
+
+import rotations
+import quaternions
 
 class GND:
-    def __init__(self, cs: int, burgers: float, slip_systems: str, G: float, nu: float, scheme="l2"):
+    def __init__(self, cs: int, burgers: float, slip_systems: str, minimization="l2"):
         """Class to perform GND calculations on a microstructure.
         Inputs:
             cs: int, crystal structure (1: FCC, 2: BCC, 3: HCP)
@@ -14,18 +19,12 @@ class GND:
             None"""
         self.cs = cs
         self.burgers = burgers * 1e-10
-        self. G = G
-        if self.G is not None:
-            self.G *= 1e9
-        self.nu = nu
-        self.scheme = scheme
+        self.minimization = minimization
         self.set_A_matrix(slip_systems.strip().replace(" ", "").lower())
         self.get_crystallography()
         self.get_symmetry_operators()
 
     def preflight(self):
-        if self.scheme == "l1" and (self.G is None or self.nu is None):
-            raise ValueError("Shear modulus and Poisson's ratio must be provided for the L1 scheme.")
         if self.coordinates is None or self.euler_angles is None or self.featIDs is None or self.spacing is None:
             raise ValueError("Data has not been set.")
         if self.coordinates.shape[0] != self.euler_angles.shape[0] or self.coordinates.shape[0] != self.featIDs.size:
@@ -69,17 +68,29 @@ class GND:
                 raise ValueError("Slip systems provided are not valid: {} for HCP".format(slip_systems))
         # For FCC: None (it is ignored)
         else:
+            self.A_matrix_choice = None
             return
 
     def set_data(self, coordinates, euler_angles, feature_ids, spacing):
+        """Set the data for the GND calculations.
+        Inputs:
+            coordinates: np.ndarray, shape (N, 3), coordinates of the points
+            euler_angles: np.ndarray, shape (N, 3), Euler angles of the points in radians
+            feature_ids: np.ndarray, shape (N,), feature IDs of the points
+            spacing: float, spacing of the microstructure"""
         self.coordinates = coordinates
         self.euler_angles = euler_angles.astype(np.float64)
         self.GAO = self.eu2om_multi(self.euler_angles)
+        # self.GAO = rotations.eu2om(self.euler_angles)
+        # self.GAO  = self.GAO.reshape(3, 3, *self.euler_angles.shape[:-1])
+        self.quats = rotations.eu2qu(self.euler_angles)
         self.featIDs = feature_ids
         self.spacing = spacing
     
     def enforce_mask_on_input(self, mask):
         self.GAO[:, :, mask] = 0.0
+        self.featIDs[mask] = 0
+        self.quats[mask] = 0.0
     
     def unpack_data(self, data):
         self.GND_SR = np.zeros(self.featIDs.size, dtype=float)
@@ -119,7 +130,11 @@ class GND:
             dthe, diffOperatorX, diffOperatorY, diffOperatorZ = self._determine_dthe(XenvCompleteness, YenvCompleteness, ZenvCompleteness, self.GAO, x1, x2, x3, self.symOp)
             # dthe = dthe[:, ::-1]
             # Calculate average misorientation from dthe
-            avg_misori = np.mean(np.abs(dthe))
+            angles = np.linalg.norm(dthe, axis=0)
+            if np.all(angles == 0):
+                avg_misori = 0
+            else:
+                avg_misori = np.mean(np.abs(angles[angles != 0]))
             # kappaSR = determine_kappaV5(dthe, diffOperatorX, diffOperatorY, diffOperatorZ, spacing)
             diffOperators = np.array([diffOperatorX, diffOperatorY, diffOperatorZ])
             kappaSR = self._determine_kappaV5(dthe, diffOperators, self.spacing)
@@ -155,55 +170,20 @@ class GND:
         # define symmetry operators for cubic or hexagonal symmetries
         if self.cs == 1 or self.cs == 2:
             # there are 24 symmetry operators for cubic symmetries
-            # 576 (24 x 24) axis/angle pairs exist for any two cubic crystal lattices
-            sym1 =  np.array([[ 1,  0,  0], [ 0,  1,  0], [ 0,  0,  1]])
-            sym2 =  np.array([[ 0,  0,  1], [ 1,  0,  0], [ 0,  1,  0]])
-            sym3 =  np.array([[ 0,  1,  0], [ 0,  0,  1], [ 1,  0,  0]])
-            sym4 =  np.array([[ 0, -1,  0], [ 0,  0,  1], [-1,  0,  0]])
-            sym5 =  np.array([[ 0, -1,  0], [ 0,  0, -1], [ 1,  0,  0]])
-            sym6 =  np.array([[ 0,  1,  0], [ 0,  0, -1], [-1,  0,  0]])
-            sym7 =  np.array([[ 0,  0, -1], [ 1,  0,  0], [ 0, -1,  0]])
-            sym8 =  np.array([[ 0,  0, -1], [-1,  0,  0], [ 0,  1,  0]])
-            sym9 =  np.array([[ 0,  0,  1], [-1,  0,  0], [ 0, -1,  0]])
-            sym10 = np.array([[-1,  0,  0], [ 0,  1,  0], [ 0,  0, -1]])
-            sym11 = np.array([[-1,  0,  0], [ 0, -1,  0], [ 0,  0,  1]])
-            sym12 = np.array([[ 1,  0,  0], [ 0, -1,  0], [ 0,  0, -1]])
-            sym13 = np.array([[ 0,  0, -1], [ 0, -1,  0], [-1,  0,  0]])
-            sym14 = np.array([[ 0,  0,  1], [ 0, -1,  0], [ 1,  0,  0]])
-            sym15 = np.array([[ 0,  0,  1], [ 0,  1,  0], [-1,  0,  0]])
-            sym16 = np.array([[ 0,  0, -1], [ 0,  1,  0], [ 1,  0,  0]])
-            sym17 = np.array([[-1,  0,  0], [ 0,  0, -1], [ 0, -1,  0]])
-            sym18 = np.array([[ 1,  0,  0], [ 0,  0, -1], [ 0,  1,  0]])
-            sym19 = np.array([[ 1,  0,  0], [ 0,  0,  1], [ 0, -1,  0]])
-            sym20 = np.array([[-1,  0,  0], [ 0,  0,  1], [ 0,  1,  0]])
-            sym21 = np.array([[ 0, -1,  0], [-1,  0,  0], [ 0,  0, -1]])
-            sym22 = np.array([[ 0,  1,  0], [-1,  0,  0], [ 0,  0, -1]])
-            sym23 = np.array([[ 0,  1,  0], [ 1,  0,  0], [ 0,  0, -1]])
-            sym24 = np.array([[ 0, -1,  0], [ 1,  0,  0], [ 0,  0, -1]])
-            symOp = np.dstack((sym1, sym2, sym3, sym4, sym5, sym6, sym7, sym8, sym9, sym10, sym11, sym12, sym13, sym14, sym15, sym16, sym17, sym18, sym19, sym20, sym21, sym22, sym23, sym24))
-            
+            symOp = quaternions.laue_elements(11)
+            symOp = rotations.qu2om(symOp).astype(float)
+            symOp = np.moveaxis(symOp, 0, -1)
+
         elif self.cs == 3:
             # there are 12 symmetry operators for hexagonal symmetries
-            # like A matrix for HCP, ortho-hexagonal coordinates
-            # 144 (12 x 12) axis/angle pairs exist for any two hexagonal lattices
-            a = np.sqrt(3)/2
-            sym1 =  np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-            sym2 =  np.array([[-0.5, a, 0], [-a, -0.5, 0], [0, 0, 1]])
-            sym3 =  np.array([[-0.5, -a, 0], [a, -0.5, 0], [0, 0, 1]])
-            sym4 =  np.array([[0.5, a, 0], [-a, 0.5, 0], [0, 0, 1]])
-            sym5 =  np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]])
-            sym6 =  np.array([[0.5, -a, 0], [a, 0.5, 0], [0, 0, 1]])
-            sym7 =  np.array([[-0.5, -a, 0], [-a, 0.5, 0], [0, 0, -1]])
-            sym8 =  np.array([[1, 0, 0], [0, -1, 0], [0, 0, -1]])
-            sym9 =  np.array([[-0.5, a, 0], [a, 0.5, 0], [0, 0, -1]])
-            sym10 = np.array([[0.5, a, 0], [a, -0.5, 0], [0, 0, -1]])
-            sym11 = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]])
-            sym12 = np.array([[0.5, -a, 0], [-a, -0.5, 0], [0, 0, -1]])
-            symOp = np.dstack((sym1, sym2, sym3, sym4, sym5, sym6, sym7, sym8, sym9, sym10, sym11, sym12))
+            symOp = quaternions.laue_elements(9)
+            symOp = rotations.qu2om(symOp).astype(float)
+            symOp = np.moveaxis(symOp, 0, -1)
+
         else:
             print('\nWarning! Crystal structure is not known. No symmetry operators have been defined.\n\n')
+
         self.symOp = symOp
-        print("\t{} symmetry operators".format(self.symOp.shape[-1]))
 
     def get_crystallography(self):
         # create linear operator B for FCC
@@ -274,7 +254,10 @@ class GND:
             
         # FCC
         else:
-            self.A = np.zeros((9,18)) # dummy variable
+            # self.A = np.zeros((9,18)) # dummy variable
+            BTB = self.B.T @ self.B
+            BTB_inv = np.linalg.inv(BTB)
+            self.A = BTB_inv @ self.B.T
             #defining number of slip systems and slip modes
             self.numSlip = 18
             self.numModes = 4 
@@ -356,8 +339,6 @@ class GND:
     def _deltathetakV5(self, gA, gB, symOp):
         gA = gA.astype(np.float64)
         gB = gB.astype(np.float64)
-        self._latestgA = gA
-        self._latestgB = gB
         if (gA == gB).all():
             return [0.0, 0.0, 0.0]
         else:
@@ -397,6 +378,114 @@ class GND:
             d_col = np.argmin(np.abs(misori_matrix), axis=0)
             disori = np.around(np.abs(misori_matrix[d_col].diagonal()), 6)
             return (disori[0], disori[1], disori[2])
+
+    def test(self, coords):
+        # Ge the environment of the current point
+        XenvCompleteness, YenvCompleteness, ZenvCompleteness = self._determine_neighborhood(self.featIDs, *coords.astype(int))
+
+        # Create the orientation gradient tensor for the current point
+        completeness = [XenvCompleteness, YenvCompleteness, ZenvCompleteness]
+        gradient_tensor = np.zeros((3, 3), dtype=np.float64)
+        misorientation = np.zeros((3,), dtype=np.float64)
+        for i, completeness in enumerate(completeness):
+            if completeness == "constant":
+                misorientation[i] = 0.0
+                gradient_tensor[i] = np.zeros((3,), dtype=np.float64)
+            else:
+                coord0, coord1, scale = self._get_neighbor(completeness, i, coords)
+                qA = self.quats[tuple(coord0)]
+                qB = self.quats[tuple(coord1)]
+                q_dis = quaternions.qu_disorientation(qA, qB)
+                # print(qA, qB, q_dis)
+                rot_vec_dis = quaternions.qu_log(q_dis) * 2
+                # print(rot_vec_dis)
+                misorientation[i] = np.linalg.norm(rot_vec_dis)
+                gradient_tensor[:, i] = rot_vec_dis / (self.spacing[i] * scale)
+        # print("Misorientation", misorientation)
+        # print("Gradient tensor", gradient_tensor.reshape(-1))
+
+        # Convert the gradient tensor to the crystal coordinates
+        # 
+
+        # Calculate the Nye tensor from the curvature tensor
+        alpha = gradient_tensor.T - np.trace(gradient_tensor)
+        # print("Alpha", alpha.reshape(-1))
+
+        # Determine the dislocation density from the misorientation
+        dd = self._minimize(alpha, self.cs, self.A, self.B, self.burgers)
+        dd = np.abs(dd)
+
+        return (dd.sum(), misorientation.mean(), dd.T)
+
+    def _deltathetakV5_qu(self, gA, gB, symOp):
+        gA = gA.astype(np.float64)
+        gB = gB.astype(np.float64)
+        if (gA == gB).all():
+            return [0.0, 0.0, 0.0]
+        else:
+            # Convert to quaternions
+            quA = rotations.om2qu(gA)
+            quB = rotations.om2qu(gB)
+            # Calculate the disorientation quaternion
+            qu_dis = quaternions.qu_disorientation(quA, quB)
+
+
+
+            # For Misorientation
+            # delg = np.linalg.solve(gA, gB).conj().transpose(0, 2, 1)
+            # l = np.around((np.diagonal(delgs).sum() - 1) / 2, 6)
+            # deltheta = np.around(np.arccos(l), 6)
+            # if deltheta == 0.0: return 0.0
+            # misori_matrix[mask, 0] = -(delgs[0, 1, mask] - delgs[1, 0, mask]) * coeff
+            # misori_matrix[mask, 1] = -(delgs[2, 0, mask] - delgs[0, 2, mask]) * coeff
+            # misori_matrix[mask, 2] = -(delgs[1, 2, mask] - delgs[2, 1, mask]) * coeff
+
+            #### For disorientation ####
+            numSym = symOp.shape # 3x3x24
+            misori_matrix = np.zeros((numSym[2]**2, 3), dtype=np.float64)
+            # Calculate the combined rotations for gA and gB with symmetry operations applied
+            gA_temps = np.einsum("ijl,jk->ikl", symOp, gA)  # 3x3x24
+            gB_temps = np.einsum("ijl,jk->ikl", symOp, gB)  # 3x3x24
+            # Move the axis of the symmetry operations to the first axis, conjugate and transpose
+            indices = np.indices((numSym[2], numSym[2])).reshape(2, -1)
+            gA_temps = gA_temps[:, :, indices[0]]  # 576x3x3
+            gB_temps = gB_temps[:, :, indices[1]]  # 576x3x3
+            # Calculate delta g
+            delgs = np.einsum("ijl,kjl->ikl", gA_temps, gB_temps)  # 3x3x576
+            delthetas = np.real(np.emath.arccos((np.trace(delgs) - 1.0) / 2.0))
+            delthetas = np.where(delthetas < 1e-6, 0.0, delthetas)
+            # Where deltheta is zero, misorientation matrix is zero
+            mask = delthetas != 0
+            misori_matrix[~mask] = 0.0
+            coeff = (delthetas[mask] / (2 * np.sin(delthetas[mask])))
+            # Calculate the misorientation matrix
+            misori_matrix[mask, 0] = -(delgs[0, 1, mask] - delgs[1, 0, mask]) * coeff
+            misori_matrix[mask, 1] = -(delgs[2, 0, mask] - delgs[0, 2, mask]) * coeff
+            misori_matrix[mask, 2] = -(delgs[1, 2, mask] - delgs[2, 1, mask]) * coeff
+            
+            # Find the minimum misorientation matrix
+            d_col = np.argmin(np.abs(misori_matrix), axis=0)
+            disori = np.around(np.abs(misori_matrix[d_col].diagonal()), 6)
+            return (disori[0], disori[1], disori[2])
+
+    def _get_neighbor(self, completeness, axis, coord):
+        d1 = np.array([0, 0, 0])
+        d2 = np.array([0, 0, 0])
+        if completeness == 'backward':
+            d1[axis] = -1
+            d2[axis] = 0
+            scale = 1
+        elif completeness == 'forward':
+            d1[axis] = 0
+            d2[axis] = 1
+            scale = 1
+        elif completeness == 'central':
+            d1[axis] = -1
+            d2[axis] = 1
+            scale = 2
+        else:
+            scale = 1
+        return (coord + d1, coord + d2, scale)
 
     def _determine_dthe(self, XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x1, x2, x3, symOp):
         environment_case = {'forward': self._deltathetakV5, 'backward': self._deltathetakV5, 'central': self._deltathetakV5, 'constant': lambda *args: [0.0, 0.0, 0.0]}
@@ -445,7 +534,7 @@ class GND:
         # Solve: A*rho = Lambd
         # Nye tensor must be converted into array form Lambda
         Lambda = alpha.reshape(-1, 1)  # Shape (9x1)
-        if self.scheme == 'l2':
+        if self.minimization == 'l2':
             if cs == 2 or cs == 3:
                 # two steps to solve via minimize‖Ax−b‖2
                 B = A.T.dot(np.linalg.inv(A.dot(A.T)))
@@ -459,15 +548,21 @@ class GND:
                     dd = dd/burgers
             else:
                 dd = B.dot(Lambda)/burgers  # same as matmul
-        elif self.scheme == 'l1':
-            c = (np.ones(A.shape[1]) * self.G * burgers**2 / (4 * np.pi))
-            c[:12] *= (1 - self.nu)**(-1)
-            optimum = linprog(c, A_eq=A, b_eq=Lambda, bounds=(0, None))
-            dd = optimum.x / burgers
+        elif self.minimization == 'l1':
+            n_constraints, n_slip_systems = A.shape
+            c = np.hstack((np.zeros(n_slip_systems), np.ones(n_slip_systems)))
+            A_eq = np.hstack([A, np.zeros((n_constraints, n_slip_systems))])
+            b_eq = Lambda.reshape(-1)
+            I = np.eye(n_slip_systems)
+            A_ub = np.vstack([np.hstack([I, -I]), np.hstack([-I, -I])])
+            b_ub = np.zeros(2*n_slip_systems)
+            bounds = [(0, np.inf)]*n_slip_systems*2
+            bounds = np.array(bounds)
+            result = optimize.linprog(c, A_eq=A_eq, b_eq=b_eq, A_ub=A_ub, b_ub=b_ub, bounds=bounds, method='highs')
+            dd = result.x[:n_slip_systems] / burgers
         else:
             raise ValueError("Minimization scheme not recognized. Please choose either 'l1' or 'l2'")
         return dd
-
 
     def _BCC_A_matrix_generationV2(self):
         # BCC A matrix formulation
@@ -720,226 +815,352 @@ class GND:
         # systems to contribute to A matrix
         return (d1, d2, d3, d4, d5)
 
-    def _determine_dthe_slow(self, XenvCompleteness, YenvCompleteness, ZenvCompleteness, GAO, x1, x2, x3, symOp):
 
-        # determine misorientation and kappa based on material point neighborhood
-        dthe = np.zeros((3, 3))
 
-        # orientation matrix of material point
-        gA = GAO[:, :, x1, x2, x3]
+def get_linear_operator(cs:int, slip_systems:str="all") -> Tuple[np.ndarray, np.ndarray]:
+    """Pre-calculate the A matrix for the given crystal structure and desired slip systems.
+    
+    Args:
+        cs (int): The crystal structure of the material. 1 for FCC, 2 for BCC, 3 for HCP.
+        slip_systems (str, optional): The slip systems to be used. Defaults to 'all'.
+                                      (FCC) - unused, always 'all'
+                                      (BCC) - 'screw+110', 'screw+112', 'screw+123', 'screw+110+112', 'screw+110+123', 'screw+112+123', 'all'
+                                      (HCP) - 'basal', 'prismatic', 'pyramidal', 'basal+prismatic', 'basal+pyramidal', 'prismatic+pyramidal', 'all'
+    
+    Returns:
+        A (np.ndarray): The A matrix for the given crystal structure and slip systems. Shape (9, n_slip_systems)
+        B (np.ndarray): The B matrix (psuedo-inverse of A) for the given crystal structure. Shape (n_slip_systems, 9)
+    """
+    # Check the input values
+    if type(cs) != int:
+        raise ValueError("Crystal structure must be an integer value.")
+    if cs not in [1, 2, 3]:
+        raise ValueError("Crystal structure must be 1, 2, or 3.")
+    if type(slip_systems) != str:
+        raise ValueError("Slip systems must be a string.")
+    slip_systems = slip_systems.lower().strip()
+    if slip_systems not in ['all', 'screw+110', 'screw+112', 'screw+123', 'screw+110+112', 'basal', 'basal+prismatic']:
+        raise ValueError("Slip systems must be 'all', 'screw+110', 'screw+112', 'screw+123', 'screw+110+112', 'basal', 'basal+prismatic', depending on the crystam structure.")
 
-        # switch statement evaluating expression for x environment
-        if XenvCompleteness == 'backward':
-            gE = GAO[:, :, x1-1, x2, x3]  #setting Euler Angle at x - 1
-            # First Nearest Neighbors 1st order backward difference----
-            diffOperatorX = 1
-            # calc specific miorientation angles for kappa calc
-            dthe[0, 0] = self._deltathetak_original(gE, gA, 1, symOp)
-            dthe[1, 0] = self._deltathetak_original(gE, gA, 2, symOp)
-            dthe[2, 0] = self._deltathetak_original(gE, gA, 3, symOp)
-            
-        elif XenvCompleteness ==  'forward':
-            gB = GAO[:, :, x1+1, x2, x3]  #setting Euler Angle at x + 1
-            # First Nearest Neighbors 1st order forward difference-----
-            diffOperatorX = 1
-            # calc specific miorientation angles for kappa calc
-            dthe[0, 0] = self._deltathetak_original(gA, gB, 1, symOp)
-            dthe[1, 0] = self._deltathetak_original(gA, gB, 2, symOp)
-            dthe[2, 0] = self._deltathetak_original(gA, gB, 3, symOp)
-            
-        elif XenvCompleteness == 'central':
-            gB = GAO[:, :, x1+1, x2, x3]  #setting Euler Angle at x + 1
-            gE = GAO[:, :, x1-1, x2, x3]  #setting Euler Angle at x - 1
-            # central finite difference
-            diffOperatorX = 2
-            # calc specific miorientation angles for kappa calc
-            dthe[0, 0] = self._deltathetak_original(gE, gB, 1, symOp)
-            dthe[1, 0] = self._deltathetak_original(gE, gB, 2, symOp)
-            dthe[2, 0] = self._deltathetak_original(gE, gB, 3, symOp)
-            
-        elif XenvCompleteness ==  'constant':
-            # in case no misorientation present
-            diffOperatorX = 1
-            dthe[0, 0] = 0
-            dthe[1, 0] = 0
-            dthe[2, 0] = 0
+    # Create the A matrix for the given crystal structure
+    if cs == 1:
+        a = np.sqrt(3)/9
+        c = np.sqrt(3)/84
+        d = 1/18
+        f = 3/14
 
-        # switch statement evaluating expression for y environment
-        if YenvCompleteness == 'backward':
-            gF = GAO[:, :, x1, x2-1, x3]  #setting Euler Angle at y - 1
-            # First Nearest Neighbors 1st order backward difference----
-            diffOperatorY = 1
-            # calc specific miorientation angles for kappa calc
-            dthe[0, 1] = self._deltathetak_original(gF, gA, 1, symOp)
-            dthe[1, 1] = self._deltathetak_original(gF, gA, 2, symOp)
-            dthe[2, 1] = self._deltathetak_original(gF, gA, 3, symOp)
-            
-        elif YenvCompleteness == 'forward':
-            gC = GAO[:, :, x1, x2+1, x3]  #setting Euler Angle at y + 1
-            # First Nearest Neighbors 1st order forward difference----
-            diffOperatorY = 1
-            # calc specific miorientation angles for kappa calc
-            dthe[0, 1] = self._deltathetak_original(gA, gC, 1, symOp)
-            dthe[1, 1] = self._deltathetak_original(gA, gC, 2, symOp)
-            dthe[2, 1] = self._deltathetak_original(gA, gC, 3, symOp)
-            
-        elif YenvCompleteness == 'central':
-            gC = GAO[:, :, x1, x2+1, x3]  #setting Euler Angle at y + 1
-            gF = GAO[:, :, x1, x2-1, x3]  #setting Euler Angle at y - 1
-            # central finite difference
-            diffOperatorY = 2
-            # calc specific miorientation angles for kappa calc
-            dthe[0, 1] = self._deltathetak_original(gF, gC, 1, symOp)
-            dthe[1, 1] = self._deltathetak_original(gF, gC, 2, symOp)
-            dthe[2, 1] = self._deltathetak_original(gF, gC, 3, symOp)
-            
-        elif YenvCompleteness ==  'constant':
-            # in case no misorientation, or no neighbor
-            diffOperatorY = 1
-            dthe[0, 1] = 0
-            dthe[1, 1] = 0
-            dthe[2, 1] = 0
+        # See Arsenlis & Parks 1999
+        B = np.array([[  a,   7*c, -13*c,  -7*c,  -a,  13*c,     c,    -c,   0],
+                      [ -a,  13*c,  -7*c,    -c,   0,     c,   7*c, -13*c,   a],
+                      [  0,     c,    -c, -13*c,   a,   7*c,  13*c,  -7*c,  -a],
+                      [  a,  -7*c,  13*c,   7*c,  -a,  13*c,    -c,    -c,   0],
+                      [ -a, -13*c,   7*c,     c,   0,     c,  -7*c, -13*c,   a],
+                      [  0,    -c,     c,  13*c,   a,   7*c, -13*c,  -7*c,  -a],
+                      [  a,  -7*c, -13*c,   7*c,  -a, -13*c,     c,     c,   0],
+                      [ -a, -13*c,  -7*c,     c,   0,    -c,   7*c,  13*c,   a],
+                      [  0,    -c,    -c,  13*c,   a,  -7*c,  13*c,   7*c,  -a],
+                      [  a,   7*c,  13*c,  -7*c,  -a, -13*c,    -c,     c,   0],
+                      [ -a,  13*c,   7*c,    -c,   0,    -c,  -7*c,  13*c,  -a],
+                      [  0,     c,     c, -13*c,   a,  -7*c, -13*c,   7*c,  -a],
+                      [5*d,     f,     0,     f, 5*d,     0,     0,     0,  -d],
+                      [5*d,     0,     f,     0,  -d,     0,     f,     0, 5*d],
+                      [ -d,     0,     0,     0, 5*d,     f,     0,     f, 5*d],
+                      [5*d,    -f,     0,    -f, 5*d,     0,     0,     0,  -d],
+                      [5*d,     0,    -f,     0,  -d,     0,    -f,     0, 5*d],
+                      [ -d,     0,     0,     0, 5*d,    -f,     0,    -f, 5*d]])
 
-        # switch statement evaluating expression for environment
-        if ZenvCompleteness == 'backward':
-            gG = GAO[:, :, x1, x2, x3-1]  #setting Euler Angle at z - 1
-            # First Nearest Neighbors 1st order backward difference----
-            diffOperatorZ = 1
-            # calc specific miorientation angles for kappa calc
-            dthe[0,2] = self._deltathetak_original(gG, gA, 1, symOp)
-            dthe[1,2] = self._deltathetak_original(gG, gA, 2, symOp)
-            dthe[2,2] = self._deltathetak_original(gG, gA, 3, symOp)
-            
-        elif ZenvCompleteness == 'forward':
-            gD = GAO[:, :, x1, x2, x3+1]  #setting Euler Angle at z + 1
-            # First Nearest Neighbors 1st order forward difference-----
-            diffOperatorZ = 1
-            # calc specific miorientation angles for kappa calc
-            dthe[0, 2] = self._deltathetak_original(gA, gD, 1, symOp)
-            dthe[1, 2] = self._deltathetak_original(gA, gD, 2, symOp)
-            dthe[2, 2] = self._deltathetak_original(gA, gD, 3, symOp)
-            
-        elif ZenvCompleteness == 'central':
-            gD = GAO[:, :, x1, x2, x3+1]  #setting Euler Angle at z + 1
-            gG = GAO[:, :, x1, x2, x3-1]  #setting Euler Angle at z - 1
-            diffOperatorZ = 2
-            # calc specific miorientation angles for kappa calc
-            dthe[0, 2] = self._deltathetak_original(gG, gD, 1, symOp)
-            dthe[1, 2] = self._deltathetak_original(gG, gD, 2, symOp)
-            dthe[2, 2] = self._deltathetak_original(gG, gD, 3, symOp)
-            
-        elif ZenvCompleteness == 'constant':
-            # zero misorientation along axis if no neighbor
-            diffOperatorZ = 1
-            dthe[0, 2] = 0
-            dthe[1, 2] = 0
-            dthe[2, 2] = 0 
-        return dthe, diffOperatorX, diffOperatorY, diffOperatorZ
+        # FCC
+        BTB = B.T @ B
+        BTB_inv = np.linalg.inv(BTB)
+        A = BTB_inv @ BTB
 
-    def _deltathetak_original(self, gA, gB, k, symOp):
-        self._latestgA = gA
-        self._latestgB = gB
-        if (gA == gB).all():
-            return 0
+    elif cs == 2:
+        # BCC
+        A = _generate_BCC_A_matrix()
+        if slip_systems == 'screw+110':
+            A = A[:,:16]
+        elif slip_systems == 'screw+112':
+            A = np.hstack((A[:,:4], A[:,16:28]))
+        elif slip_systems == 'screw+123':
+            A = np.hstack((A[:,:4], A[:,28:]))
+        elif slip_systems == 'screw+110+112':
+            A = A[:,:28]
+        elif slip_systems == 'screw+110+123':
+            A = np.hstack((A[:,:16], A[:,28:]))
+        elif slip_systems == 'screw+112+123':
+            A = np.hstack((A[:,:4], A[:,16:]))
+        elif slip_systems == 'all':
+            pass
+        B = AtoB(A)
+
+    elif cs == 3:
+        # HCP
+        A = _generate_HCP_A_matrix()
+        if slip_systems == 'basal':
+            A = A[:,:6]  # 3 edge basal and 3 screw basal slip systems
+        elif slip_systems == 'prismatic':
+            A = A[:,6:9]  # 3 edge prismatic slip systems
+        elif slip_systems == 'pyramidal':
+            A = A[:,9:]  # 12 edge pyramidal and 12 screw pyramidal slip systems
+        elif slip_systems == 'basal+prismatic':
+            A = A[:,:9]
+        elif slip_systems == 'basal+pyramidal':
+            A = np.hstack((A[:,:6], A[:,9:]))
+        elif slip_systems == 'prismatic+pyramidal':
+            A = A[:,6:]
+        elif slip_systems == 'all':
+            pass
+        B = AtoB(A)
+
+    return (A, B)
+
+
+def _generate_BCC_A_matrix() -> np.ndarray:
+    """Generate the A matrix for BCC crystal structure."""
+    # Burgers vectors and slip plane normals for BCC
+    b_n = np.array([
+        [[ 1,  1, -1], [ 1,  1, -1]],  # <111> screw
+        [[ 1, -1, -1], [ 1, -1, -1]],
+        [[ 1, -1,  1], [ 1, -1,  1]],
+        [[ 1,  1,  1], [ 1,  1,  1]],
+        [[ 1,  1, -1], [ 0,  1,  1]],  # {110}<111> edge
+        [[ 1,  1, -1], [ 1,  0,  1]],
+        [[ 1,  1, -1], [ 1, -1,  0]],
+        [[ 1, -1, -1], [ 0,  1, -1]],
+        [[ 1, -1, -1], [ 1,  0,  1]],
+        [[ 1, -1, -1], [ 1,  1,  0]],
+        [[ 1, -1,  1], [ 0,  1,  1]],
+        [[ 1, -1,  1], [ 1,  0, -1]],
+        [[ 1, -1,  1], [ 1,  1,  0]],
+        [[ 1,  1,  1], [ 0,  1, -1]],
+        [[ 1,  1,  1], [ 1,  0, -1]],
+        [[ 1,  1,  1], [ 1, -1,  0]],
+        [[-1, -1,  1], [-2,  1, -1]],  # {112}<111> edge
+        [[-1, -1,  1], [ 1, -2, -1]],
+        [[-1, -1,  1], [ 1,  1,  2]],
+        [[-1,  1,  1], [-2, -1, -1]],
+        [[-1,  1,  1], [ 1,  2, -1]],
+        [[-1,  1,  1], [ 1, -1,  2]],
+        [[ 1, -1,  1], [ 2,  1, -1]],
+        [[ 1, -1,  1], [-1, -2, -1]],
+        [[ 1, -1,  1], [-1,  1,  2]],
+        [[ 1,  1,  1], [ 2, -1, -1]],
+        [[ 1,  1,  1], [-1,  2, -1]],
+        [[ 1,  1,  1], [-1, -1,  2]],
+        [[ 1,  1, -1], [ 1,  2,  3]],  # {123}<111> edge
+        [[ 1,  1, -1], [-1,  3,  2]],
+        [[ 1,  1, -1], [ 2,  1,  3]],
+        [[ 1,  1, -1], [-2,  3,  1]],
+        [[ 1,  1, -1], [ 3, -1,  2]],
+        [[ 1,  1, -1], [ 3, -2,  1]],
+        [[ 1, -1, -1], [-1,  2, -3]],
+        [[ 1, -1, -1], [ 1,  3, -2]],
+        [[ 1, -1, -1], [ 2, -1,  3]],
+        [[ 1, -1, -1], [ 2,  3, -1]],
+        [[ 1, -1, -1], [ 3,  1,  2]],
+        [[ 1, -1, -1], [ 3,  2,  1]],
+        [[ 1, -1,  1], [ 1, -2, -3]],
+        [[ 1, -1,  1], [ 1,  3,  2]],
+        [[ 1, -1,  1], [ 2, -1, -3]],
+        [[ 1, -1,  1], [ 2,  3,  1]],
+        [[ 1, -1,  1], [ 3,  1, -2]],
+        [[ 1, -1,  1], [ 3,  2, -1]],
+        [[ 1,  1,  1], [ 1,  2, -3]],
+        [[ 1,  1,  1], [ 1, -3,  2]],
+        [[ 1,  1,  1], [ 2,  1, -3]],
+        [[ 1,  1,  1], [ 2, -3,  1]],
+        [[ 1,  1,  1], [-3,  1,  2]],
+        [[ 1,  1,  1], [-3,  2,  1]],
+    ]).astype(float)
+    burgers = b_n[:, 0] / np.sqrt(3)
+    normals = b_n[:, 1] / np.linalg.norm(b_n[:, 1], axis=1)[:, None]
+
+    # Get the sense vectors
+    t = np.cross(normals, burgers)
+
+    # Fix the screw dislocations (sense vectors are the burgers vectors)
+    t[:4] = burgers[:4]
+
+    # Calculate the outer product of the two vectors
+    outer = np.einsum('...i,...j->...ij', burgers, t)
+
+    # Convert to the (n_slip_systems, 9) matrix
+    A_bcc = outer.reshape(-1, 9).T
+
+    return A_bcc
+
+
+def _generate_HCP_A_matrix() -> np.ndarray:
+    """Generate the A matrix for HCP crystal structure."""
+    # Relevant Direcitons in [uvtw] notation
+    b_n_uvtw = np.array([
+        [[ 1,  1, -2, 0], [ 0,  0,  0, 1]],  # Basal
+        [[ 1, -2,  1, 0], [ 0,  0,  0, 1]],
+        [[-2,  1,  1, 0], [ 0,  0,  0, 1]],
+        [[2, - 1, -1, 0], [ 0,  1, -1, 0]],  # Prismatic
+        [[-1,  2, -1, 0], [ 1,  0, -1, 0]],
+        [[ 1,  1, -2, 0], [ 1, -1,  0, 0]],
+        [[-1, -1,  2, 3], [ 1,  0, -1, 1]],  # Pyramidal
+        [[-2,  1,  1, 3], [ 1,  0, -1, 1]],
+        [[ 1,  1, -2, 3], [ 0, -1,  1, 1]],
+        [[-1,  2, -1, 3], [ 0, -1,  1, 1]],
+        [[ 2, -1, -1, 3], [-1,  1,  0, 1]],
+        [[ 1, -2,  1, 3], [-1,  1,  0, 1]],
+        [[ 2, -1, -1, 3], [-1,  0,  1, 1]],
+        [[ 1,  1, -2, 3], [-1,  0,  1, 1]],
+        [[-1, -1,  2, 3], [ 0,  1, -1, 1]],
+        [[ 1, -2,  1, 3], [ 0,  1, -1, 1]],
+        [[-2,  1,  1, 3], [ 1, -1,  0, 1]],
+        [[-1,  2, -1, 3], [ 1, -1,  0, 1]],
+    ]).astype(float)
+
+    # Convert to uvw
+    u = b_n_uvtw[:, 0, 0]
+    v = b_n_uvtw[:, 0, 1]
+    t = b_n_uvtw[:, 0, 2]
+    w = b_n_uvtw[:, 0, 3]
+    burgers = np.array([u - t, v - t, w]).T
+    burgers /= np.linalg.norm(burgers, axis=1)[:, None]
+
+    u = b_n_uvtw[:, 1, 0]
+    v = b_n_uvtw[:, 1, 1]
+    t = b_n_uvtw[:, 1, 2]
+    w = b_n_uvtw[:, 1, 3]
+    normals = np.array([u - t, v - t, w]).T
+    normals /= np.linalg.norm(normals, axis=1)[:, None]
+
+    # Get the sense vectors
+    t = np.cross(normals, burgers)
+
+    # Put in the screw dislocations
+    burgers = np.vstack((burgers[:3], burgers))  # 3 screw basal dislocations
+    t = np.vstack((burgers[:3], t))
+    burgers = np.vstack((burgers, burgers[-12:]))  # 12 screw pyramidal dislocations
+    t = np.vstack((t, burgers[-12:]))
+
+    # Calculate the outer product of the two vectors
+    outer = np.einsum('...i,...j->...ij', burgers, t)
+    outer = outer.reshape(-1, 9).T
+    outer = outer / np.linalg.norm(outer, axis=0)
+
+    return outer
+
+
+def AtoB(A: np.ndarray) -> np.ndarray:
+    """Calculate the B matrix (psuedo-inverse of A) for the given A matrix.
+    
+    Args:
+        A (np.ndarray): The A matrix. Shape (9, n_slip_systems)
+    
+    Returns:
+        np.ndarray: The B matrix. Shape (n_slip_systems, 9)
+    """
+    return A.T.dot(np.linalg.inv(A.dot(A.T)))
+
+
+def get_completeness(grain_ids: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Analyze the neighborhood type for finite difference calculations in a 3D EBSD dataset.
+    
+    Args:
+        grain_ids: 3D numpy array containing grain IDs
+        
+    Returns:
+        Tuple of three 3D arrays containing DiffType enums for x, y, and z directions
+        0: constant, 1: forward, 2: backward, 3: central
+    """
+    # Initialize output arrays
+    shape = grain_ids.shape
+    x_diffs = np.zeros(shape, dtype=np.int8)
+    y_diffs = np.zeros(shape, dtype=np.int8)
+    z_diffs = np.zeros(shape, dtype=np.int8)
+    
+    # Create boolean masks for grain transitions
+    # Compute differences along each axis
+    x_trans = grain_ids[:-1,...] != grain_ids[1:,...]
+    y_trans = grain_ids[:,:-1,:] != grain_ids[:,1:,:]
+    z_trans = grain_ids[...,:-1] != grain_ids[...,1:]
+    
+    # Pad the transition arrays to match original dimensions
+    x_trans = np.pad(x_trans, ((0,1), (0,0), (0,0)))
+    y_trans = np.pad(y_trans, ((0,0), (0,1), (0,0)))
+    z_trans = np.pad(z_trans, ((0,0), (0,0), (0,1)))
+    
+    # For each axis, determine the difference type based on transitions
+    for idx in np.ndindex(shape):
+        i, j, k = idx
+        if grain_ids[i,j,k] == 0:
+            continue
+        
+        # X-direction analysis
+        if i == 0:
+            x_diffs[i,j,k] = 1 if not x_trans[i,j,k] else 0
+        elif i == shape[0]-1:
+            x_diffs[i,j,k] = 2 if not x_trans[i-1,j,k] else 0
         else:
-            # For Misorientation
-            # delg = np.linalg.solve(gA, gB).conj().transpose(0, 2, 1)
-            # l = np.around((np.diagonal(delgs).sum() - 1) / 2, 6)
-            # deltheta = np.around(np.arccos(l), 6)
-            # if deltheta == 0.0: return 0.0
-            # elif k == 1: return -(delg[1, 2] - delg[2, 1]) * (deltheta / (2 * np.sin(deltheta)))
-            # elif k == 2: return -(delg[2, 0] - delg[0, 2]) * (deltheta / (2 * np.sin(deltheta)))
-            # elif k == 3: return -(delg[0, 1] - delg[1, 0]) * (deltheta / (2 * np.sin(deltheta)))
-            # else: return 0.0
-
-            # For disorientation
-            numSym = symOp.shape # 3x3x24
-            # misori_matrix = np.zeros((numSym[2]**2, 3), dtype=np.float32)
-            misori_matrix = np.zeros(numSym[2]**2, dtype=np.float32)
-            gA_temps = np.einsum("ijl,jkl->ikl", symOp, np.einsum('ij,kjl->ikl', gA, symOp))
-            gB_temps = np.einsum("ijl,jkl->ikl", symOp, np.einsum('ij,kjl->ikl', gB, symOp))
-            # gA_temps = np.einsum("ijl,jk->ikl", symOp, gA)
-            # gB_temps = np.einsum("ijl,jk->ikl", symOp, gB)
-            gA_temps = np.moveaxis(gA_temps, 2, 0).conj().transpose(0, 2, 1)
-            gB_temps = np.moveaxis(gB_temps, 2, 0).conj().transpose(0, 2, 1)
-            indices = np.indices((numSym[2], numSym[2])).reshape(2, -1)
-            gA_temps = gA_temps[indices[0]] # 24x24
-            gB_temps = gB_temps[indices[1]] # 24x24
-            delgs = np.linalg.solve(gA_temps, gB_temps).conj().transpose(0, 2, 1) # 576x3x3
-            # delgs = np.linalg.solve(gA_temps, gB_temps).transpose(0, 2, 1) # 576x3x3
-            l = np.around((np.diagonal(delgs, axis1=1, axis2=2).sum(axis=1) - 1) / 2, 6)
-            delthetas = np.around(np.arccos(l), 6)
-            
-            # Where deltheta is zero, misorientation matrix is zero
-            misori_matrix[delthetas == 0.0] = 0.0
-            mask = delthetas != 0.0
-            coeff = (delthetas[mask] / (2 * np.sin(delthetas[mask])))
-            
-            if k == 1:   misori_matrix[mask] = -(delgs[mask, 0, 1] - delgs[mask, 1, 0]) * coeff
-            elif k == 2: misori_matrix[mask] = -(delgs[mask, 2, 0] - delgs[mask, 0, 2]) * coeff
-            elif k == 3: misori_matrix[mask] = -(delgs[mask, 1, 2] - delgs[mask, 2, 1]) * coeff
-            else:        misori_matrix[mask] = 0
-            
-            d_col = np.argmin(np.abs(misori_matrix))
-            disori = np.abs(misori_matrix[d_col])
-            return disori
-
-    def _determine_neighborhood_old(self, featIDs, x1, x2, x3):
-        # checking completeness of the voxel neighborhood in x dimension
-        # if the voxel is on the edge of the microstructure
-        if x1 == 0:
-            XenvCompleteness = 'forward'
-        # if the voxel is on the other edge of the microstructure
-        elif x1 == featIDs.shape[0] - 1:
-            XenvCompleteness = 'backward'
-        # if the voxel is on the edge of a grain
-        elif featIDs[x1, x2, x3] == featIDs[x1+1, x2, x3] & featIDs[x1, x2, x3] != featIDs[x1-1, x2, x3]:
-            XenvCompleteness = 'forward'
-        # if the voxel is on the other edge of a grain
-        elif featIDs[x1, x2, x3] != featIDs[x1+1, x2, x3] & featIDs[x1, x2, x3] == featIDs[x1-1, x2, x3]:
-            XenvCompleteness = 'backward'
-        # if the voxel is somewhere in the middle of a grain
-        elif featIDs[x1, x2, x3] == featIDs[x1+1, x2, x3] & featIDs[x1, x2, x3] == featIDs[x1-1, x2, x3]:
-            XenvCompleteness = 'central'
+            if x_trans[i-1,j,k] and x_trans[i,j,k]:
+                x_diffs[i,j,k] = 0
+            elif x_trans[i-1,j,k]:
+                x_diffs[i,j,k] = 1
+            elif x_trans[i,j,k]:
+                x_diffs[i,j,k] = 2
+            else:
+                x_diffs[i,j,k] = 3
+        
+        # Y-direction analysis
+        if j == 0:
+            y_diffs[i,j,k] = 1 if not y_trans[i,j,k] else 0
+        elif j == shape[1]-1:
+            y_diffs[i,j,k] = 2 if not y_trans[i,j-1,k] else 0
         else:
-            XenvCompleteness = 'constant'
-
-        # checking completeness of the voxel neighborhood in y dimension    
-        # if the voxel is on the edge of the microstructure
-        if x2 == 0:
-            YenvCompleteness = 'forward'
-        # if the voxel is on the other edge of the microstructure
-        elif x2 == featIDs.shape[1] - 1:
-            YenvCompleteness = 'backward'
-        # if the voxel is on the edge of a grain
-        elif featIDs[x1, x2, x3] == featIDs[x1, x2+1, x3] & featIDs[x1, x2, x3] != featIDs[x1, x2-1, x3]:
-            YenvCompleteness = 'forward'
-        # if the voxel is on the other edge of a grain
-        elif featIDs[x1, x2, x3] != featIDs[x1, x2+1, x3] & featIDs[x1, x2, x3] == featIDs[x1, x2-1, x3]:
-            YenvCompleteness = 'backward'
-        # if the voxel is somewhere in the middle of a grain
-        elif featIDs[x1, x2, x3] == featIDs[x1, x2+1, x3] & featIDs[x1, x2, x3] == featIDs[x1, x2-1, x3]:
-            YenvCompleteness = 'central'
+            if y_trans[i,j-1,k] and y_trans[i,j,k]:
+                y_diffs[i,j,k] = 0
+            elif y_trans[i,j-1,k]:
+                y_diffs[i,j,k] = 1
+            elif y_trans[i,j,k]:
+                y_diffs[i,j,k] = 2
+            else:
+                y_diffs[i,j,k] = 3
+        
+        # Z-direction analysis
+        if k == 0:
+            z_diffs[i,j,k] = 1 if not z_trans[i,j,k] else 0
+        elif k == shape[2]-1:
+            z_diffs[i,j,k] = 2 if not z_trans[i,j,k-1] else 0
         else:
-            YenvCompleteness = 'constant'
+            if z_trans[i,j,k-1] and z_trans[i,j,k]:
+                z_diffs[i,j,k] = 0
+            elif z_trans[i,j,k-1]:
+                z_diffs[i,j,k] = 1
+            elif z_trans[i,j,k]:
+                z_diffs[i,j,k] = 2
+            else:
+                z_diffs[i,j,k] = 3
 
-        # checking completeness of the voxel neighborhood in z dimension 
-        # if the voxel is on the edge of the microstructure
-        if x3 == 0:
-            ZenvCompleteness = 'forward'
-        # if the voxel is on the other edge of the microstructure
-        elif x3 == featIDs.shape[2] - 1:
-            ZenvCompleteness = 'backward'
-        # if the voxel is on the edge of a grain
-        elif featIDs[x1, x2, x3] == featIDs[x1, x2, x3+1] & featIDs[x1, x2, x3] != featIDs[x1, x2, x3-1]:
-            ZenvCompleteness = 'forward'
-        # if the voxel is on the other edge of a grain
-        elif featIDs[x1, x2, x3] != featIDs[x1, x2, x3+1] & featIDs[x1, x2, x3] == featIDs[x1, x2, x3-1]:
-            ZenvCompleteness = 'backward'
-        # if the voxel is somewhere in the middle of a grain
-        elif featIDs[x1, x2, x3] == featIDs[x1, x2, x3+1] & featIDs[x1, x2, x3] == featIDs[x1, x2, x3-1]:
-            ZenvCompleteness = 'central'
-        else:
-            ZenvCompleteness = 'constant'
+    # Package into a single array
+    neighborhoods = np.stack((x_diffs, y_diffs, z_diffs), axis=-1)
+    return neighborhoods
 
-        return XenvCompleteness,YenvCompleteness,ZenvCompleteness
+
+def get_orientation_gradients(quats: np.ndarray, spacing: Tuple[float, float, float], neighborhoods: np.ndarray) -> np.ndarray:
+    """Calculate the orientation gradients for a 3D EBSD dataset.
+    This is essentially the rotation vectors corresponding to the disorientation between neighboring voxels,
+    divided by the spacing along each dimension. The result is a 3x3 matrix for each voxel.
+
+    Args:
+        quats: 3D numpy array containing quaternions, (X, Y, Z, 4)
+        spacing: Tuple of floats containing the voxel spacing along each dimension, (dx, dy, dz)
+        neighborhoods: Tuple of three 3D arrays containing DiffType enums for x, y, and z directions, """
+    # Create lookup table that gets neighbor indices based on the completeness
+    # 0: constant, 1: forward, 2: backward, 3: central
+    def _get_neighbor(completeness: int, idx: int, axis: int):
+        coords = np.array([[[1, 0, 0], [-1, 0, 0]], [[0, 1, 0], [0, -1, 0]], [[0, 0, 1], [0, 0, -1]]])
+        return (idx + coords[axis, completeness], ceil(completeness / 2))
+
+
+if __name__ == "__main__":
+    np.set_printoptions(linewidth=200)
+
+    shape = (10, 10, 10)
+    test_data = np.random.randint(0, sum(shape) // 10, shape)
+    get_completeness(test_data)

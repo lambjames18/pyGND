@@ -2,7 +2,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
-import h5py
+# import h5py
 
 
 class InteractiveSlider:
@@ -51,10 +51,15 @@ class InteractiveSlider:
         self.im.axes.figure.canvas.draw()
         self.fig.canvas.draw_idle()
 
-sr = np.load("D:/Research/scripts/TriBeam_GND/output_data/TaSpalled_3SS_GND_SR.npy")
+path = "/Users/jameslamb/Documents/research/data/Marc_rolled-Al-EBSD/Marc_rolled-Al_GND_SR.npy"
+log = True
 
-sr = np.log10(sr, where=sr > 0)
+data = np.load(path).transpose(0, 2, 1)
+print(data.shape)
+if log:
+    data = np.log10(data, where=data > 0)
 
-mn, mx = sr[sr > 0].min(), sr[sr > 0].max()
-print(mn, mx, sr[sr > 0].mean(), sr[sr > 0].std())
-InteractiveSlider(sr, vmin=mn, vmax=mx, cmap="jet")
+mn, mx = data[data > 0].min(), data[data > 0].max()
+print("Max:", mx, "Min:", mn)
+print("Mean:", data[data > 0].mean(), "Std:", data[data > 0].std())
+InteractiveSlider(data, vmin=mn, vmax=mx, cmap="jet")
