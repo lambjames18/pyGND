@@ -317,7 +317,7 @@ def qu_avg(q: np.ndarray, laue_id) -> np.ndarray:
     return qn_close.mean(axis=0)
 
 
-def qu_log(q: np.ndarray) -> np.ndarray:
+def qu_log(q: np.ndarray, tol=1e-6) -> np.ndarray:
     """Logarithm of a quaternion.
     log(q) = [0, theta*n] where q = [cos(theta), sin(theta)*n]
     quaternion should be scalar first, vector second.
@@ -330,8 +330,9 @@ def qu_log(q: np.ndarray) -> np.ndarray:
     theta = np.arccos(s)
     # Use the angle to get the rotation vector
     norm_v = np.linalg.norm(v, axis=-1)
-    v = v * np.where(norm_v > 0, theta / norm_v, 0).reshape(-1, 1)
-    return v
+    with np.errstate(divide="ignore", invalid="ignore"):
+        qlog = v * np.where(norm_v > tol, theta / norm_v, 0).reshape(-1, 1)
+    return qlog
 
 
 def qu_disorientation(

@@ -2,6 +2,7 @@ from typing import Tuple
 from math import ceil
 import numpy as np
 from scipy import optimize
+from tqdm import tqdm
 
 import rotations
 import quaternions
@@ -1279,7 +1280,7 @@ def _minimize(alpha, cs, A, B, burgers, minimization='l2') -> np.ndarray:
     elif minimization == 'l1':
         n_constraints, n_slip_systems = A.shape
         dd = np.zeros((n_slip_systems,) + shape)
-        for idx in np.ndindex(shape):
+        for idx in tqdm(np.ndindex(shape)):
             i, j, k = idx
             c = np.hstack((np.zeros(n_slip_systems), np.ones(n_slip_systems)))
             A_eq = np.hstack([A, np.zeros((n_constraints, n_slip_systems))])
@@ -1307,22 +1308,34 @@ if __name__ == "__main__":
 
     spacing *= 1e-6
     A, B = get_linear_operator(cs)
-    print(A.shape, B.shape)
 
     quats = rotations.eu2qu(euler)
-    featIDs = featIDs[:, :10, :10]
-    quats = quats[:10, :10, :10]
+    # featIDs = featIDs[:, :10, :10]
+    # quats = quats[:10, :10, :10]
     print(" ")
     np.set_printoptions(linewidth=200)
 
+    import time
+    t0 = time.time()
     completeness = get_completeness(featIDs)
+    print("Completeness time:", time.time() - t0)
+    
+    t0 = time.time()
     nbrs0, nbrs1, distances = get_neighbors(completeness)
     distances *= spacing
+    print("Neighbors time:", time.time() - t0)
+    
+    t0 = time.time()
     dphi = get_orientation_gradients(quats, nbrs0, nbrs1, distances, cs)
+    print("Orientation gradients time:", time.time() - t0)
+    
+    t0 = time.time()
     trace = np.trace(dphi, axis1=3, axis2=4)
     alpha = dphi.transpose(0, 1, 2, 4, 3) - trace[..., None, None]
+    print("Alpha time:", time.time() - t0)
 
+    t0 = time.time()
     dd = _minimize(alpha, cs, A, B, burgers, minimization)
     dd = np.abs(dd)
-    print(dd.shape)
+    print("Minimization time:", time.time() - t0)
     
