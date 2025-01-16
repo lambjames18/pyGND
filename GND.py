@@ -1275,22 +1275,26 @@ def _minimize(alpha, cs, A, B, burgers, minimization='l2') -> np.ndarray:
             else:
                 dd = dd/burgers
         else:
+            print(B.shape, Lambda.shape)
             dd = B.dot(Lambda)/burgers  # same as matmul
                 
     elif minimization == 'l1':
         n_constraints, n_slip_systems = A.shape
         dd = np.zeros((n_slip_systems,) + shape)
-        for idx in tqdm(np.ndindex(shape)):
+        print("A", A.shape)
+        print("Lambda", Lambda.shape)
+        for idx in tqdm(np.ndindex(shape), total=np.prod(shape), desc="Minimizing"):
             i, j, k = idx
             c = np.hstack((np.zeros(n_slip_systems), np.ones(n_slip_systems)))
             A_eq = np.hstack([A, np.zeros((n_constraints, n_slip_systems))])
             b_eq = Lambda[i, j, k].reshape(-1)
             I = np.eye(n_slip_systems)
-            A_ub = np.vstack([np.hstack([I, -I]), np.hstack([-I, -I])])
-            b_ub = np.zeros(2*n_slip_systems)
+            # A_ub = np.vstack([np.hstack([I, -I]), np.hstack([-I, -I])])
+            # b_ub = np.zeros(2*n_slip_systems)
             bounds = [(0, np.inf)]*n_slip_systems*2
             bounds = np.array(bounds)
-            result = optimize.linprog(c, A_eq=A_eq, b_eq=b_eq, A_ub=A_ub, b_ub=b_ub, bounds=bounds, method='highs')
+            result = optimize.linprog(c, A_eq=A_eq, b_eq=b_eq, bounds=bounds, method='highs')
+            # result = optimize.linprog(c, A_eq=A_eq, b_eq=b_eq, A_ub=A_ub, b_ub=b_ub, bounds=bounds, method='highs')
             dd[:, i, j, k] = result.x[:n_slip_systems] / burgers
     else:
         raise ValueError("Minimization scheme not recognized. Please choose either 'l1' or 'l2'")
@@ -1304,14 +1308,14 @@ if __name__ == "__main__":
     cs = 1
     burgers = 2.86e-10
     euler, featIDs, spacing = utils.read_ang(path)
-    minimization = 'l1'
+    minimization = 'l2'
 
     spacing *= 1e-6
     A, B = get_linear_operator(cs)
 
     quats = rotations.eu2qu(euler)
-    # featIDs = featIDs[:, :10, :10]
-    # quats = quats[:10, :10, :10]
+    featIDs = featIDs[:, :10, :10]
+    quats = quats[:10, :10, :10]
     print(" ")
     np.set_printoptions(linewidth=200)
 
