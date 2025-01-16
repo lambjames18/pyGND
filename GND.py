@@ -18,6 +18,10 @@ class GND:
         Returns:
             None"""
         self.cs = cs
+        if self.cs == 1 or self.cs == 2:
+            self.laue_id = 11
+        elif self.cs == 3:
+            self.laue_id = 9
         self.burgers = burgers * 1e-10
         self.minimization = minimization
         self.set_A_matrix(slip_systems.strip().replace(" ", "").lower())
@@ -395,7 +399,7 @@ class GND:
                 coord0, coord1, scale = self._get_neighbor(completeness, i, coords)
                 qA = self.quats[tuple(coord0)]
                 qB = self.quats[tuple(coord1)]
-                q_dis = quaternions.qu_disorientation(qA, qB)
+                q_dis = quaternions.qu_disorientation(qA, qB, self.laue_id, self.laue_id)
                 # print(qA, qB, q_dis)
                 rot_vec_dis = quaternions.qu_log(q_dis) * 2
                 # print(rot_vec_dis)
@@ -870,9 +874,7 @@ def get_linear_operator(cs:int, slip_systems:str="all") -> Tuple[np.ndarray, np.
                       [ -d,     0,     0,     0, 5*d,    -f,     0,    -f, 5*d]])
 
         # FCC
-        BTB = B.T @ B
-        BTB_inv = np.linalg.inv(BTB)
-        A = BTB_inv @ BTB
+        A = pseudo_inverse(B)
 
     elif cs == 2:
         # BCC
@@ -891,7 +893,7 @@ def get_linear_operator(cs:int, slip_systems:str="all") -> Tuple[np.ndarray, np.
             A = np.hstack((A[:,:4], A[:,16:]))
         elif slip_systems == 'all':
             pass
-        B = AtoB(A)
+        B = pseudo_inverse(A)
 
     elif cs == 3:
         # HCP
@@ -910,7 +912,7 @@ def get_linear_operator(cs:int, slip_systems:str="all") -> Tuple[np.ndarray, np.
             A = A[:,6:]
         elif slip_systems == 'all':
             pass
-        B = AtoB(A)
+        B = pseudo_inverse(A)
 
     return (A, B)
 
@@ -1046,7 +1048,7 @@ def _generate_HCP_A_matrix() -> np.ndarray:
     return outer
 
 
-def AtoB(A: np.ndarray) -> np.ndarray:
+def pseudo_inverse(A: np.ndarray) -> np.ndarray:
     """Calculate the B matrix (psuedo-inverse of A) for the given A matrix.
     
     Args:
@@ -1077,16 +1079,24 @@ def get_completeness(grain_ids: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.
     
     # Create boolean masks for grain transitions
     # Compute differences along each axis
-    x_trans = grain_ids[:-1,...] != grain_ids[1:,...]
-    y_trans = grain_ids[:,:-1,:] != grain_ids[:,1:,:]
-    z_trans = grain_ids[...,:-1] != grain_ids[...,1:]
-    
-    # Pad the transition arrays to match original dimensions
-    x_trans = np.pad(x_trans, ((0,1), (0,0), (0,0)))
-    y_trans = np.pad(y_trans, ((0,0), (0,1), (0,0)))
-    z_trans = np.pad(z_trans, ((0,0), (0,0), (0,1)))
+    if grain_ids.shape[0] == 1:
+        x_trans = np.ones_like(grain_ids, dtype=bool)
+    else:
+        x_trans = grain_ids[:-1,...] != grain_ids[1:,...]
+        x_trans = np.pad(x_trans, ((0,1), (0,0), (0,0)))
+    if grain_ids.shape[1] == 1:
+        y_trans = np.ones_like(grain_ids, dtype=bool)
+    else:
+        y_trans = grain_ids[:,:-1,:] != grain_ids[:,1:,:]
+        y_trans = np.pad(y_trans, ((0,0), (0,1), (0,0)))
+    if grain_ids.shape[2] == 1:
+        z_trans = np.ones_like(grain_ids, dtype=bool)
+    else:
+        z_trans = grain_ids[...,:-1] != grain_ids[...,1:]
+        z_trans = np.pad(z_trans, ((0,0), (0,0), (0,1)))
     
     # For each axis, determine the difference type based on transitions
+    completeness = []
     for idx in np.ndindex(shape):
         i, j, k = idx
         if grain_ids[i,j,k] == 0:
@@ -1094,8 +1104,10 @@ def get_completeness(grain_ids: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.
         
         # X-direction analysis
         if i == 0:
+            # print("i0", x_trans[i,j,k])
             x_diffs[i,j,k] = 1 if not x_trans[i,j,k] else 0
         elif i == shape[0]-1:
+            # print("iN", x_trans[i-1,j,k])
             x_diffs[i,j,k] = 2 if not x_trans[i-1,j,k] else 0
         else:
             if x_trans[i-1,j,k] and x_trans[i,j,k]:
@@ -1136,31 +1148,181 @@ def get_completeness(grain_ids: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.
                 z_diffs[i,j,k] = 2
             else:
                 z_diffs[i,j,k] = 3
-
+        
     # Package into a single array
-    neighborhoods = np.stack((x_diffs, y_diffs, z_diffs), axis=-1)
-    return neighborhoods
+    completeness = np.stack((x_diffs, y_diffs, z_diffs), axis=-1)
+    return completeness
 
 
-def get_orientation_gradients(quats: np.ndarray, spacing: Tuple[float, float, float], neighborhoods: np.ndarray) -> np.ndarray:
+def get_neighbors(completeness: np.ndarray) -> np.ndarray:
+    """Convert the completeness array into a list of neighbor indices."""
+    # Get the shape of the completeness array
+    shape = completeness.shape[:-1]
+
+    # Create coordinate shifts for the pairs and the scale for the finite difference calculation
+    shifts0 = np.zeros((3,) + shape + (3,), dtype=np.int32)
+    shifts1 = np.zeros((3,) + shape + (3,), dtype=np.int32)
+    scale = np.zeros(shape + (3,), dtype=np.float32)
+    
+    # Get size of numpy rray in memory
+    b_v = (completeness.nbytes + shifts0.nbytes + shifts1.nbytes + scale.nbytes) / np.prod(shape)
+
+    # Only central and backward differences will have a shift in the first point
+    shifts0[0][(completeness[..., 0] == 2) | (completeness[..., 0] == 3)] = [-1, 0, 0]
+    shifts0[1][(completeness[..., 1] == 2) | (completeness[..., 1] == 3)] = [0, -1, 0]
+    shifts0[2][(completeness[..., 2] == 2) | (completeness[..., 2] == 3)] = [0, 0, -1]
+
+    # Only central and forward differences will have a shift in the second point
+    shifts1[0][(completeness[..., 0] == 1) | (completeness[..., 0] == 3)] = [1, 0, 0]
+    shifts1[1][(completeness[..., 1] == 1) | (completeness[..., 1] == 3)] = [0, 1, 0]
+    shifts1[2][(completeness[..., 2] == 1) | (completeness[..., 2] == 3)] = [0, 0, 1]
+
+    # Create coordinate array
+    coords = np.indices(shape).transpose(1, 2, 3, 0)  # (x, y, z, ndim)
+    coords0 = np.stack([coords + shift for shift in shifts0], axis=-2)
+    coords1 = np.stack([coords + shift for shift in shifts1], axis=-2)
+
+    # Handle forward and backward differences (scale is 1)
+    scale[..., 0][(completeness[..., 0] == 1) | (completeness[..., 0] == 2)] = 1
+    scale[..., 1][(completeness[..., 1] == 1) | (completeness[..., 1] == 2)] = 1
+    scale[..., 2][(completeness[..., 2] == 1) | (completeness[..., 2] == 2)] = 1
+
+    # Handle central differences (scale is 2)
+    scale[..., 0][(completeness[..., 0] == 3)] = 2
+    scale[..., 1][(completeness[..., 1] == 3)] = 2
+    scale[..., 2][(completeness[..., 2] == 3)] = 2
+
+    # Make sure everywhere that has a 0 completeness has a 0 scale
+    scale[completeness == 0] = 0
+    
+    # coords dimensions
+    # 0: x index in volume
+    # 1: y index in volume
+    # 2: z index in volume
+    # 3: the axis of the difference (0: x, 1: y, 2: z)
+    # 4: the coordinate of the voxel (0: x, 1: y, 2: z)
+    # so coords0[4, 5, 6, 0, 1] is the y-coordinate of the first voxel in the finite difference pair along the x-direction for the voxel at (4, 5, 6)
+    # and coords1[4, 5, 6, 0, 1] is the y-coordinate of the second voxel in the pair
+
+    return (coords0, coords1, scale)
+
+
+def get_orientation_gradients(quats: np.ndarray, pts0: np.ndarray, pts1: np.ndarray, distances: np.ndarray, cs: int) -> np.ndarray:
     """Calculate the orientation gradients for a 3D EBSD dataset.
     This is essentially the rotation vectors corresponding to the disorientation between neighboring voxels,
     divided by the spacing along each dimension. The result is a 3x3 matrix for each voxel.
 
     Args:
         quats: 3D numpy array containing quaternions, (X, Y, Z, 4)
-        spacing: Tuple of floats containing the voxel spacing along each dimension, (dx, dy, dz)
-        neighborhoods: Tuple of three 3D arrays containing DiffType enums for x, y, and z directions, """
-    # Create lookup table that gets neighbor indices based on the completeness
-    # 0: constant, 1: forward, 2: backward, 3: central
-    def _get_neighbor(completeness: int, idx: int, axis: int):
-        coords = np.array([[[1, 0, 0], [-1, 0, 0]], [[0, 1, 0], [0, -1, 0]], [[0, 0, 1], [0, 0, -1]]])
-        return (idx + coords[axis, completeness], ceil(completeness / 2))
+        pts0: 3D numpy array containing the coordinates of the first voxel in the finite difference pairs, (X, Y, Z, 3)
+        pts1: 3D numpy array containing the coordinates of the second voxel in the finite difference pairs, (X, Y, Z, 3)
+        distances: 3D numpy array containing the distances between the finite difference pairs, (X, Y, Z, 3)
+        cs: The crystal structure of the material. 1 for FCC, 2 for BCC, 3 for HCP.
+
+    Returns:
+        3D numpy array containing the orientation gradients, (X, Y, Z, 3, 3)
+          This is essectially 3 rotation vectors corresponding to the disorientation between neighboring voxels,
+          each divided by the distance between the finite difference pair. The 3x3 matrix for each point is the rotation vector for each axis.
+    """
+    # Handle the crystal structure
+    if cs not in [1, 2, 3]:
+        raise ValueError("Crystal structure must be 1, 2, or 3.")
+    elif cs == 1 or cs == 2:
+        laue_id = 11
+    else:
+        laue_id = 9
+
+    # Get shape
+    shape = quats.shape[:-1]
+
+    # Create the output arrays
+    gradient_tensors = np.zeros(shape + (3, 3), dtype=np.float32)
+    misorientations = np.zeros(shape + (3,), dtype=np.float32)
+    for i in range(3):
+        m = distances[..., i] > 0
+        if not np.any(m):
+            continue
+        q0 = quats[tuple(pts0[:, :, :, i].reshape(-1, 3).T)]  # (X*Y*Z, 4)
+        q1 = quats[tuple(pts1[:, :, :, i].reshape(-1, 3).T)]  # (X*Y*Z, 4)
+        q_dis = quaternions.qu_disorientation(q0[m.flatten()], q1[m.flatten()], laue_id, laue_id)  # (X*Y*Z, 4)
+        rot_vec_dis = quaternions.qu_log(q_dis) * 2  # (X*Y*Z, 3)
+        # rot_vec_dis = rot_vec_dis.reshape(shape + (3,))  # (X, Y, Z, 3)
+        misorientations[m][..., i] = np.linalg.norm(rot_vec_dis, axis=-1)
+        gradient_tensors[m][..., i] = rot_vec_dis / distances[m][..., i:i+1]
+
+    return gradient_tensors
+
+
+def _minimize(alpha, cs, A, B, burgers, minimization='l2') -> np.ndarray:
+    # Equation to be solved -> A*rho[array form] = Lambda[Nye in array form] 
+    # Solve: A*rho = Lambd
+    # Nye tensor must be converted into array form Lambda
+    # Get shape
+    shape = alpha.shape[:-2]
+    numSlip = A.shape[1]
+    Lambda = alpha.reshape(shape + (-1, 1))  # Shape (9x1)
+    if minimization == 'l2':
+        if cs == 2 or cs == 3:
+            # two steps to solve via minimize‖Ax−b‖2
+            dd = B.dot(Lambda)
+            if numSlip > 9 & cs == 3:
+                # TODO: Handle c axis slip systems which have a different burgers vector
+                burgers_ca = 4.68
+                burgers_ca = burgers_ca*1E-10
+                dd[:9] = dd[:9] / burgers
+                dd[9:33] = dd[9:33] / burgers_ca
+            else:
+                dd = dd/burgers
+        else:
+            dd = B.dot(Lambda)/burgers  # same as matmul
+                
+    elif minimization == 'l1':
+        n_constraints, n_slip_systems = A.shape
+        dd = np.zeros((n_slip_systems,) + shape)
+        for idx in np.ndindex(shape):
+            i, j, k = idx
+            c = np.hstack((np.zeros(n_slip_systems), np.ones(n_slip_systems)))
+            A_eq = np.hstack([A, np.zeros((n_constraints, n_slip_systems))])
+            b_eq = Lambda[i, j, k].reshape(-1)
+            I = np.eye(n_slip_systems)
+            A_ub = np.vstack([np.hstack([I, -I]), np.hstack([-I, -I])])
+            b_ub = np.zeros(2*n_slip_systems)
+            bounds = [(0, np.inf)]*n_slip_systems*2
+            bounds = np.array(bounds)
+            result = optimize.linprog(c, A_eq=A_eq, b_eq=b_eq, A_ub=A_ub, b_ub=b_ub, bounds=bounds, method='highs')
+            dd[:, i, j, k] = result.x[:n_slip_systems] / burgers
+    else:
+        raise ValueError("Minimization scheme not recognized. Please choose either 'l1' or 'l2'")
+    dd = dd.reshape((B.shape[0],) + shape).transpose(1, 2, 3, 0)
+    return dd
 
 
 if __name__ == "__main__":
+    import utillities as utils
+    path = "E:/rolled_Al/merged_1x1.ang"
+    cs = 1
+    burgers = 2.86e-10
+    euler, featIDs, spacing = utils.read_ang(path)
+    minimization = 'l1'
+
+    spacing *= 1e-6
+    A, B = get_linear_operator(cs)
+    print(A.shape, B.shape)
+
+    quats = rotations.eu2qu(euler)
+    featIDs = featIDs[:, :10, :10]
+    quats = quats[:10, :10, :10]
+    print(" ")
     np.set_printoptions(linewidth=200)
 
-    shape = (10, 10, 10)
-    test_data = np.random.randint(0, sum(shape) // 10, shape)
-    get_completeness(test_data)
+    completeness = get_completeness(featIDs)
+    nbrs0, nbrs1, distances = get_neighbors(completeness)
+    distances *= spacing
+    dphi = get_orientation_gradients(quats, nbrs0, nbrs1, distances, cs)
+    trace = np.trace(dphi, axis1=3, axis2=4)
+    alpha = dphi.transpose(0, 1, 2, 4, 3) - trace[..., None, None]
+
+    dd = _minimize(alpha, cs, A, B, burgers, minimization)
+    dd = np.abs(dd)
+    print(dd.shape)
+    

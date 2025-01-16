@@ -330,7 +330,7 @@ def qu_log(q: np.ndarray) -> np.ndarray:
     theta = np.arccos(s)
     # Use the angle to get the rotation vector
     norm_v = np.linalg.norm(v, axis=-1)
-    v = v * np.where(norm_v > 0, theta / norm_v, 0)
+    v = v * np.where(norm_v > 0, theta / norm_v, 0).reshape(-1, 1)
     return v
 
 
@@ -609,6 +609,9 @@ if __name__ == "__main__":
     qu2 = rotations.eu2qu(np.deg2rad(eu2))
     qu1_s = qu_prod(laue_elements(11), qu1)
     qu2_s = qu_prod(laue_elements(11), qu2)
+
+    print(qu_log(qu1_s).shape)
+    exit()
 
     dis = qu_disorientation(qu1, qu2)
     angle = qu_angle(dis)

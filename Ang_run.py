@@ -27,9 +27,9 @@ path = config["PARAMS"]["ANG File"]
 directory = config["PARAMS"]["Save Folder"]
 ID = config["PARAMS"]["ID"]
 burgers = float(config["PARAMS"]["Burgers"])
-cs = config["PARAMS"]["Crystallography"]
-slip_systems = config["PARAMS"]["Slip Systems"]
-minimization = config["PARAMS"]["Minimization"]
+cs = config["PARAMS"]["Crystallography"].lower()
+slip_systems = config["PARAMS"]["Slip Systems"].lower()
+minimization = config["PARAMS"]["Minimization"].lower()
 
 if cs.lower() == 'fcc': cs = 1
 elif cs.lower() == 'bcc': cs = 2
@@ -145,26 +145,10 @@ if __name__ == '__main__':
             else:
                 index += 1
         v = []
-        # for i in range(1):
-        #     v.append(gnd.compute(coords[index + i], verbose=True)[0])
-        eu1 = gnd.euler_angles[coords[index][0], coords[index][1], coords[index][2]]
-        eu2 = gnd.euler_angles[coords[index + 1][0], coords[index + 1][1], coords[index + 1][2]]
-        import rotations
-        qu1 = rotations.eu2qu(eu1)
-        qu2 = rotations.eu2qu(eu2)
-        print("Quat1", qu1, "Euler1", np.rad2deg(eu1))
-        print("Quat2", qu2, "Euler2", np.rad2deg(eu2))
-        import quaternions
-        dis = quaternions.qu_disorientation(qu1, qu2)
-        print("Disorientation", dis)
-        exit()
-
-        dds, mis, dd = gnd.compute(coords[index])
-        print(f"Compute: {dds:.3e} ({mis:.6f} deg)")
-        dds, mis, dd = gnd.test(coords[index])
-        print(f"Test: {dds:.3e} ({mis:.6f} deg)")
-        # print("Total GND density for 10 points in the volume: {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}".format(*v))
-        # print("Total GND density for 10 points in the volume: {:.2e}".format(*v))
+        for i in range(10):
+            v.append(gnd.test(coords[index + i])[0])
+            # v.append(gnd.compute(coords[index + i], verbose=False)[0])
+        print("Total GND density for 10 points in the volume: {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}".format(*v))
         exit()
 
     
