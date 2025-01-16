@@ -1,8 +1,10 @@
+import os
 from typing import Tuple
 from math import ceil
 import numpy as np
 from scipy import optimize
 from tqdm import tqdm
+import multiprocessing as mp
 
 import rotations
 import quaternions
@@ -1098,7 +1100,7 @@ def get_completeness(grain_ids: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.
     
     # For each axis, determine the difference type based on transitions
     completeness = []
-    for idx in np.ndindex(shape):
+    for idx in tqdm(np.ndindex(shape), total=np.prod(shape), desc="Determining voxel completenesses..."):
         i, j, k = idx
         if grain_ids[i,j,k] == 0:
             continue
@@ -1226,10 +1228,67 @@ def get_finite_difference_coordinates(grain_ids: np.ndarray) -> Tuple[np.ndarray
     return (coords0, coords1, scale)
 
 
-def get_orientation_gradients(quats: np.ndarray, pts0: np.ndarray, pts1: np.ndarray, distances: np.ndarray, cs: int) -> np.ndarray:
+def get_orientation_gradients(quats: np.ndarray, pts0: np.ndarray, pts1: np.ndarray, distances: np.ndarray, cs: int, n_cpus: int = None) -> np.ndarray:
     """Calculate the orientation gradients for a 3D EBSD dataset.
     This is essentially the rotation vectors corresponding to the disorientation between neighboring voxels,
     divided by the spacing along each dimension. The result is a 3x3 matrix for each voxel.
+    This function will call the private function _get_orientation_gradients to do the actual calculations.
+    Supports parallel processing.
+
+    Args:
+        quats: 3D numpy array containing quaternions, (X, Y, Z, 4)
+        pts0: 3D numpy array containing the coordinates of the first voxel in the finite difference pairs, (X, Y, Z, 3)
+        pts1: 3D numpy array containing the coordinates of the second voxel in the finite difference pairs, (X, Y, Z, 3)
+        distances: 3D numpy array containing the distances between the finite difference pairs, (X, Y, Z, 3)
+        cs: The crystal structure of the material. 1 for FCC, 2 for BCC, 3 for HCP.
+        n_cpus: The number of CPUs to use for parallel processing. If None, all available CPUs minus one will be used.
+
+    Returns:
+        3D numpy array containing the orientation gradients, (X, Y, Z, 3, 3)
+          This is essectially 3 rotation vectors corresponding to the disorientation between neighboring voxels,
+          each divided by the distance between the finite difference pair. The 3x3 matrix for each point is the rotation vector for each axis.
+    """
+    # Get the cpus
+    if n_cpus is None:
+        n_cpus = os.cpu_count() - 1
+
+    # Get the shape
+    shape = quats.shape[:-1]
+    
+    # Run calculations in parallel, split up by the z-axis
+    with mp.Pool(processes=n_cpus) as pool:
+        results = list(
+            tqdm(
+                pool.imap(
+                    get_rotation_vectors,
+                    [(quats[i], pts0[i], pts1[i], cs) for i in range(shape[0])],
+                ),
+                total=shape[0],
+                desc="Calculating Orientation Gradients",
+            )
+        )
+
+    # Combine the results
+    rot_vectors = np.stack(results, axis=0)
+
+    # Get the misorientations from the rotation vectors
+    misorientation = np.linalg.norm(rot_vectors, axis=-1)
+
+    # Get the orientation gradients
+    gradient_tensors = np.zeros_like(rot_vectors)
+    m = misorientation != 0
+    gradient_tensors[m] = rot_vectors[m] / misorientation[m][..., None]
+
+    return gradient_tensors, misorientation
+    
+
+# def get_rotation_vectors(quats: np.ndarray, pts0: np.ndarray, pts1: np.ndarray, cs: int) -> np.ndarray:
+def get_rotation_vectors(*args) -> np.ndarray:
+    """Calculate the orientation gradients for a 3D EBSD dataset.
+    This is essentially the rotation vectors corresponding to the disorientation between neighboring voxels,
+    divided by the spacing along each dimension. The result is a 3x3 matrix for each voxel.
+    Note that the arguments are passed as a single tuple to allow for parallel processing,
+    but the function can also be called with the arguments passed individually.
 
     Args:
         quats: 3D numpy array containing quaternions, (X, Y, Z, 4)
@@ -1243,6 +1302,11 @@ def get_orientation_gradients(quats: np.ndarray, pts0: np.ndarray, pts1: np.ndar
           This is essectially 3 rotation vectors corresponding to the disorientation between neighboring voxels,
           each divided by the distance between the finite difference pair. The 3x3 matrix for each point is the rotation vector for each axis.
     """
+    # Handle the arguments
+    if len(args) == 1:
+        quats, pts0, pts1, cs = args[0]
+    else:
+        quats, pts0, pts1, cs = args
     # Handle the crystal structure
     if cs not in [1, 2, 3]:
         raise ValueError("Crystal structure must be 1, 2, or 3.")
@@ -1254,22 +1318,22 @@ def get_orientation_gradients(quats: np.ndarray, pts0: np.ndarray, pts1: np.ndar
     # Get shape
     shape = quats.shape[:-1]
 
+    # Create global mask
+    mask = np.all(pts0 != pts1, axis=-1)
+
     # Create the output arrays
-    gradient_tensors = np.zeros(shape + (3, 3), dtype=np.float32)
-    misorientations = np.zeros(shape + (3,), dtype=np.float32)
+    rot_vectors = np.zeros(shape + (3, 3), dtype=np.float32)
     for i in range(3):
-        m = distances[..., i] > 0
+        # Create a mask of where the two points are not the same
+        m = mask[..., i]
         if not np.any(m):
             continue
         q0 = quats[tuple(pts0[:, :, :, i].reshape(-1, 3).T)]  # (X*Y*Z, 4)
         q1 = quats[tuple(pts1[:, :, :, i].reshape(-1, 3).T)]  # (X*Y*Z, 4)
         q_dis = quaternions.qu_disorientation(q0[m.flatten()], q1[m.flatten()], laue_id, laue_id)  # (X*Y*Z, 4)
-        rot_vec_dis = quaternions.qu_log(q_dis) * 2  # (X*Y*Z, 3)
-        # rot_vec_dis = rot_vec_dis.reshape(shape + (3,))  # (X, Y, Z, 3)
-        misorientations[m][..., i] = np.linalg.norm(rot_vec_dis, axis=-1)
-        gradient_tensors[m][..., i] = rot_vec_dis / distances[m][..., i:i+1]
+        rot_vectors[m][..., i] = quaternions.qu_log(q_dis) * 2  # (X*Y*Z, 3)
 
-    return gradient_tensors
+    return rot_vectors
 
 
 def minimize(alpha, cs, A, B, burgers, minimization='l2') -> np.ndarray:
@@ -1324,29 +1388,42 @@ def minimize(alpha, cs, A, B, burgers, minimization='l2') -> np.ndarray:
 
 if __name__ == "__main__":
     import utillities as utils
-    path = "E:/rolled_Al/merged_1x1.ang"
+
+    which = "3D"
+
     cs = 1
-    burgers = 2.86e-10
-    euler, featIDs, spacing = utils.read_ang(path)
     minimization = 'l2'
+    n_cpus = 1
+
+    if which == "2D":
+        path = "E:/rolled_Al/merged_1x1.ang"
+        burgers = 2.86e-10
+        euler, ids, spacing = utils.read_ang(path)
+        euler = euler[:, 200:250, 200:250]
+        ids = ids[:, 200:250, 200:250]
+
+    elif which == "3D":
+        path = "D:/Research/CoNi_90/Data/3D/CoNi90.dream3d"
+        burgers = 2.48e-10
+        euler, ids, spacing = utils.read_dream3d(path)
+        # euler = euler[200:300, 200:300, 200:300]
+        # ids = ids[200:300, 200:300, 200:300]
 
     spacing *= 1e-6
     A, B = get_linear_operator(cs)
 
     quats = rotations.eu2qu(euler)
-    featIDs = featIDs[:, :10, :10]
-    quats = quats[:10, :10, :10]
     print(" ")
     np.set_printoptions(linewidth=200)
 
     import time
     t0 = time.time()
-    nbrs0, nbrs1, distances = get_finite_difference_coordinates(featIDs)
+    nbrs0, nbrs1, distances = get_finite_difference_coordinates(ids)
     distances *= spacing
     print("Neighbors time:", time.time() - t0)
     
     t0 = time.time()
-    dphi = get_orientation_gradients(quats, nbrs0, nbrs1, distances, cs)
+    dphi, mis = get_orientation_gradients(quats, nbrs0, nbrs1, distances, cs, n_cpus)
     print("Orientation gradients time:", time.time() - t0)
     
     t0 = time.time()
@@ -1354,8 +1431,8 @@ if __name__ == "__main__":
     alpha = dphi.transpose(0, 1, 2, 4, 3) - trace[..., None, None]
     print("Alpha time:", time.time() - t0)
 
-    t0 = time.time()
-    dd = minimize(alpha, cs, A, B, burgers, minimization)
-    dd = np.abs(dd)
-    print("Minimization time:", time.time() - t0)
+    # t0 = time.time()
+    # dd = minimize(alpha, cs, A, B, burgers, minimization)
+    # dd = np.abs(dd)
+    # print("Minimization time:", time.time() - t0)
     
