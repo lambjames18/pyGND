@@ -879,7 +879,7 @@ def get_linear_operator(cs:int, slip_systems:str="all") -> Tuple[np.ndarray, np.
 
     elif cs == 2:
         # BCC
-        A = _generate_BCC_A_matrix()
+        A = generate_BCC_A_matrix()
         if slip_systems == 'screw+110':
             A = A[:,:16]
         elif slip_systems == 'screw+112':
@@ -898,7 +898,7 @@ def get_linear_operator(cs:int, slip_systems:str="all") -> Tuple[np.ndarray, np.
 
     elif cs == 3:
         # HCP
-        A = _generate_HCP_A_matrix()
+        A = generate_HCP_A_matrix()
         if slip_systems == 'basal':
             A = A[:,:6]  # 3 edge basal and 3 screw basal slip systems
         elif slip_systems == 'prismatic':
@@ -918,7 +918,7 @@ def get_linear_operator(cs:int, slip_systems:str="all") -> Tuple[np.ndarray, np.
     return (A, B)
 
 
-def _generate_BCC_A_matrix() -> np.ndarray:
+def generate_BCC_A_matrix() -> np.ndarray:
     """Generate the A matrix for BCC crystal structure."""
     # Burgers vectors and slip plane normals for BCC
     b_n = np.array([
@@ -993,7 +993,7 @@ def _generate_BCC_A_matrix() -> np.ndarray:
     return A_bcc
 
 
-def _generate_HCP_A_matrix() -> np.ndarray:
+def generate_HCP_A_matrix() -> np.ndarray:
     """Generate the A matrix for HCP crystal structure."""
     # Relevant Direcitons in [uvtw] notation
     b_n_uvtw = np.array([
@@ -1208,6 +1208,24 @@ def get_neighbors(completeness: np.ndarray) -> np.ndarray:
     return (coords0, coords1, scale)
 
 
+def get_finite_difference_coordinates(grain_ids: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Calculate the coordinates for finite difference pairs in a 3D EBSD dataset.
+    
+    Args:
+        grain_ids: 3D numpy array containing grain IDs
+        
+    Returns:
+        Tuple of three 3D arrays containing the coordinates of the first voxel, the coordinates of the second voxel, and the scale factor
+    """
+    # Get the completeness array
+    completeness = get_completeness(grain_ids)
+    
+    # Get the neighbors
+    coords0, coords1, scale = get_neighbors(completeness)
+    
+    return (coords0, coords1, scale)
+
+
 def get_orientation_gradients(quats: np.ndarray, pts0: np.ndarray, pts1: np.ndarray, distances: np.ndarray, cs: int) -> np.ndarray:
     """Calculate the orientation gradients for a 3D EBSD dataset.
     This is essentially the rotation vectors corresponding to the disorientation between neighboring voxels,
@@ -1254,7 +1272,7 @@ def get_orientation_gradients(quats: np.ndarray, pts0: np.ndarray, pts1: np.ndar
     return gradient_tensors
 
 
-def _minimize(alpha, cs, A, B, burgers, minimization='l2') -> np.ndarray:
+def minimize(alpha, cs, A, B, burgers, minimization='l2') -> np.ndarray:
     # Equation to be solved -> A*rho[array form] = Lambda[Nye in array form] 
     # Solve: A*rho = Lambd
     # Nye tensor must be converted into array form Lambda
@@ -1302,6 +1320,8 @@ def _minimize(alpha, cs, A, B, burgers, minimization='l2') -> np.ndarray:
     return dd
 
 
+
+
 if __name__ == "__main__":
     import utillities as utils
     path = "E:/rolled_Al/merged_1x1.ang"
@@ -1321,11 +1341,7 @@ if __name__ == "__main__":
 
     import time
     t0 = time.time()
-    completeness = get_completeness(featIDs)
-    print("Completeness time:", time.time() - t0)
-    
-    t0 = time.time()
-    nbrs0, nbrs1, distances = get_neighbors(completeness)
+    nbrs0, nbrs1, distances = get_finite_difference_coordinates(featIDs)
     distances *= spacing
     print("Neighbors time:", time.time() - t0)
     
@@ -1339,7 +1355,7 @@ if __name__ == "__main__":
     print("Alpha time:", time.time() - t0)
 
     t0 = time.time()
-    dd = _minimize(alpha, cs, A, B, burgers, minimization)
+    dd = minimize(alpha, cs, A, B, burgers, minimization)
     dd = np.abs(dd)
     print("Minimization time:", time.time() - t0)
     
