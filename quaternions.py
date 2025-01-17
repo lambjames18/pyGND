@@ -48,7 +48,8 @@ def qu_norm(qu: np.ndarray) -> np.ndarray:
         np.ndarray of normalized quaternions.
     """
     norms = np.linalg.norm(qu, axis=-1, keepdims=True)
-    return np.where(norms > 0, qu / norms, 0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return np.where(norms > 0, qu / norms, 0)
 
 
 # Modified for P factor

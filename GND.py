@@ -5,6 +5,7 @@ import numpy as np
 from scipy import optimize
 from tqdm import tqdm
 import multiprocessing as mp
+from joblib import Parallel, delayed
 
 import rotations
 import quaternions
@@ -1261,9 +1262,6 @@ def get_orientation_gradients(quats: np.ndarray, pts0: np.ndarray, pts1: np.ndar
     # Get the orientation gradients
     gradient_tensors = np.zeros_like(rot_vectors)
     m = misorientation != 0
-    print(gradient_tensors.shape, rot_vectors.shape, distances.shape)
-    print(gradient_tensors[m].shape, rot_vectors[m].shape, distances[m].shape)
-    print(distances[m][..., None].shape)
     gradient_tensors[m] = rot_vectors[m] / distances[m][..., None]
 
     return gradient_tensors, misorientation
@@ -1310,9 +1308,6 @@ def get_rotation_vectors(*args) -> np.ndarray:
     else:
         laue_id = 9
 
-    # Get shape
-    shape = quats.shape[:-1]
-
     # Create global mask
     valid = np.any(pts0 != pts1, axis=-1)
 
@@ -1330,50 +1325,141 @@ def get_rotation_vectors(*args) -> np.ndarray:
     return rot_vectors.transpose(1, 2, 3, 0, 4)
 
 
-def minimize(alpha, cs, A, B, burgers, minimization='l2') -> np.ndarray:
+def _minimize_l2(Lambda: np.ndarray, B: np.ndarray) -> np.ndarray:
+    """Perform the minimization using the L2 norm.
+
+    Args:
+        Lambda: The Nye tensor components. Shape (n_voxels, 9)
+        B: The B matrix. Shape (n_slip_systems, 9)
+
+    Returns:
+        np.ndarray: The dislocation density. Shape (n_slip_systems, n_voxels)"""
+    return B.dot(Lambda.T).reshape((-1,))
+
+
+def _minimize_l1(Lambda: np.ndarray, A: np.ndarray) -> np.ndarray:
+    """Perform the minimization using the L1 norm.
+
+    Args:
+        Lambda: The Nye tensor components. Shape (n_voxels, 9)
+        A: The A matrix. Shape (n_constraints, n_slip_systems)
+
+    Returns:
+        np.ndarray: The dislocation density. Shape (n_slip_systems, n_voxels)
+    """
+    # Parse inputs
+    n_constraints, n_slip_systems = A.shape
+    N = Lambda.shape[0]
+
+    # Initialize the output array
+    dd = np.zeros((n_slip_systems, N))
+
+    # Run minimzation for each point
+    for i in range(N):
+        c = np.hstack((np.zeros(n_slip_systems), np.ones(n_slip_systems)))
+        A_eq = np.hstack([A, np.zeros((n_constraints, n_slip_systems))])
+        b_eq = Lambda[i].reshape(-1)
+        I = np.eye(n_slip_systems)
+        A_ub = np.vstack([np.hstack([I, -I]), np.hstack([-I, -I])])
+        b_ub = np.zeros(2*n_slip_systems)
+        bounds = [(0, np.inf)]*n_slip_systems*2
+        bounds = np.array(bounds)
+        result = optimize.linprog(c, A_eq=A_eq, b_eq=b_eq, A_ub=A_ub, b_ub=b_ub, bounds=bounds, method='highs')
+        dd[:, i] = result.x[:n_slip_systems]
+    return dd
+
+
+def minimize(alpha, cs, A, B, burgers, minimization='l2', n_cpus=None, chunk_size=None) -> np.ndarray:
+    """Minimize the dislocation density using the given minimization scheme.
+    
+    Args:
+        alpha: The Nye tensor components. Shape (..., 3, 3)
+        cs: The crystal structure of the material. 1 for FCC, 2 for BCC, 3 for HCP.
+        A: The A matrix. Shape (9, n_slip_systems)
+        B: The B matrix, psuedo-inverse of A. Shape (n_slip_systems, 9)
+        burgers: The burgers vector for the material.
+                 For HCP with pyramidal slip systems, this should be a tuple of the two burgers vectors."""
     # Equation to be solved -> A*rho[array form] = Lambda[Nye in array form] 
     # Solve: A*rho = Lambd
     # Nye tensor must be converted into array form Lambda
     # Get shape
     shape = alpha.shape[:-2]
-    numSlip = A.shape[1]
-    Lambda = alpha.reshape(shape + (-1, 1))  # Shape (9x1)
+    Lambda = alpha.reshape(-1, 9)
+    out_shape = (A.shape[1],) + shape
     if minimization == 'l2':
-        if cs == 2 or cs == 3:
-            # two steps to solve via minimize‖Ax−b‖2
-            dd = B.dot(Lambda)
-            if numSlip > 9 & cs == 3:
-                # TODO: Handle c axis slip systems which have a different burgers vector
-                burgers_ca = 4.68
-                burgers_ca = burgers_ca*1E-10
-                dd[:9] = dd[:9] / burgers
-                dd[9:33] = dd[9:33] / burgers_ca
-            else:
-                dd = dd/burgers
-        else:
-            dd = B.dot(Lambda)/burgers  # same as matmul
-                
+        dd = _minimize_l2(Lambda, B).reshape(out_shape)
+
     elif minimization == 'l1':
-        n_constraints, n_slip_systems = A.shape
-        dd = np.zeros((n_slip_systems,) + shape)
-        print("A", A.shape)
-        print("Lambda", Lambda.shape)
-        for idx in tqdm(np.ndindex(shape), total=np.prod(shape), desc="Minimizing"):
-            i, j, k = idx
-            c = np.hstack((np.zeros(n_slip_systems), np.ones(n_slip_systems)))
-            A_eq = np.hstack([A, np.zeros((n_constraints, n_slip_systems))])
-            b_eq = Lambda[i, j, k].reshape(-1)
-            I = np.eye(n_slip_systems)
-            # A_ub = np.vstack([np.hstack([I, -I]), np.hstack([-I, -I])])
-            # b_ub = np.zeros(2*n_slip_systems)
-            bounds = [(0, np.inf)]*n_slip_systems*2
-            bounds = np.array(bounds)
-            result = optimize.linprog(c, A_eq=A_eq, b_eq=b_eq, bounds=bounds, method='highs')
-            # result = optimize.linprog(c, A_eq=A_eq, b_eq=b_eq, A_ub=A_ub, b_ub=b_ub, bounds=bounds, method='highs')
-            dd[:, i, j, k] = result.x[:n_slip_systems] / burgers
+        # Setup parallel processing parameters
+        if n_cpus is None:
+            n_cpus = os.cpu_count() - 1
+
+        # Setup chunk size
+        if chunk_size is None:
+            chunk_size = max(1, Lambda.shape[0] // (n_cpus * 4))
+
+        # Split into chunks
+        chunks = np.array_split(Lambda, Lambda.shape[0] // chunk_size)
+
+        # Process chunks in parallel
+        with Parallel(n_jobs=n_cpus) as parallel:
+            chunk_results = parallel(
+                delayed(_minimize_l1)(
+                    chunk, A
+                ) for chunk in tqdm(chunks, desc="Minimizing (L1) chunks")
+            )
+        
+        # Combine the results
+        dd = np.hstack(chunk_results).reshape(out_shape)
+        
     else:
         raise ValueError("Minimization scheme not recognized. Please choose either 'l1' or 'l2'")
-    dd = dd.reshape((B.shape[0],) + shape).transpose(1, 2, 3, 0)
+
+    # Divide by Burgers vector correctly based on crystal structure and slip systems
+    if cs == 1 or cs == 2:
+        dd = dd/burgers
+    else:
+        if len(burgers) == 2:
+            burgers_basal_prismatic = burgers[0]
+            burgers_pyramidal = burgers[1]
+        elif len(burgers) == 1 and dd.shape[0] <= 9:
+            burgers_basal_prismatic = burgers
+        elif len(burgers) == 1 and dd.shape[0] == 24:
+            burgers_pyramidal = burgers
+        else:
+            raise ValueError("For HCP, when mixing basal/prismatic and pyramidal slip systems, the Burgers vector must be a tuple of (basa/prismatic, pyramidal) Burgers vectors.")
+
+        # Basal slip
+        if dd.shape[0] == 6:
+            dd = dd/burgers_basal_prismatic
+
+        # Prismatic slip
+        elif dd.shape[0] == 3:
+            dd = dd/burgers_basal_prismatic
+
+        # Pyramidal slip
+        elif dd.shape[0] == 24:
+            dd = dd/burgers_pyramidal
+
+        # Basal + Prismatic slip
+        elif dd.shape[0] == 9:
+            dd = dd/burgers_basal_prismatic
+
+        # Basal + Pyramidal slip
+        elif dd.shape[0] == 30:
+            dd[:6] = dd[:6]/burgers_basal_prismatic
+            dd[6:] = dd[6:]/burgers_pyramidal
+
+        # Prismatic + Pyramidal slip
+        elif dd.shape[0] == 27:
+            dd[:3] = dd[:3]/burgers_basal_prismatic
+            dd[3:] = dd[3:]/burgers_pyramidal
+
+        # All slip systems
+        elif dd.shape[0] == 33:
+            dd[:9] = dd[:9]/burgers_basal_prismatic
+            dd[9:] = dd[9:]/burgers_pyramidal
+
     return dd
 
 
@@ -1382,19 +1468,20 @@ def minimize(alpha, cs, A, B, burgers, minimization='l2') -> np.ndarray:
 if __name__ == "__main__":
     import utillities as utils
     import matplotlib.pyplot as plt
+    import time
 
     which = "2D"
 
     cs = 1
-    minimization = 'l2'
+    minimization = 'l1'
     n_cpus = 1
 
     if which == "2D":
         path = "E:/rolled_Al/merged_1x1.ang"
         burgers = 2.86e-10
         euler, ids, spacing = utils.read_ang(path)
-        euler = euler[:, :300, :300]
-        ids = ids[:, :300, :300]
+        # euler = euler[:, :100, :100]
+        # ids = ids[:, :100, :100]
 
     elif which == "3D":
         path = "D:/Research/CoNi_90/Data/3D/CoNi90.dream3d"
@@ -1403,6 +1490,8 @@ if __name__ == "__main__":
         # euler = euler[200:300, 200:300, 200:300]
         # ids = ids[200:300, 200:300, 200:300]
 
+    T = time.time()
+    
     spacing *= 1e-6
     A, B = get_linear_operator(cs)
 
@@ -1410,7 +1499,6 @@ if __name__ == "__main__":
     print(" ")
     np.set_printoptions(linewidth=200)
 
-    import time
     t0 = time.time()
     nbrs0, nbrs1, distances = get_finite_difference_coordinates(ids)
     distances *= spacing
@@ -1430,12 +1518,14 @@ if __name__ == "__main__":
     dd = np.abs(dd)
     print("Minimization time:", time.time() - t0)
 
+    print("Total time:", time.time() - T)
+
     print("Misorientation", mis.min(), mis.mean(), mis.max())
     print("Dislocation Density", dd.min(), dd.mean(), dd.max())
 
     avg_mis = np.rad2deg(np.mean(mis, axis=-1))
 
-    dd_total = np.sum(dd, axis=-1)
+    dd_total = np.sum(dd, axis=0)
     dd_total = np.log10(dd_total + 1e-6)
 
     fig, ax = plt.subplots(1, 2, figsize=(10, 5))
