@@ -21,7 +21,7 @@ https://github.com/facebookresearch/pynp3d
 """
 
 import numpy as np
-from rotations import P as epsijk
+from rotations import epsijk
 
 
 def qu_std(qu: np.ndarray) -> np.ndarray:
@@ -47,7 +47,8 @@ def qu_norm(qu: np.ndarray) -> np.ndarray:
     Returns:
         np.ndarray of normalized quaternions.
     """
-    return qu / np.linalg.norm(qu, axis=-1, keepdims=True)
+    norms = np.linalg.norm(qu, axis=-1, keepdims=True)
+    return np.where(norms > 0, qu / norms, 0)
 
 
 # Modified for P factor
@@ -163,9 +164,9 @@ def qu_prod_axis(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     """
     aw, ax, ay, az = a[..., 0], a[..., 1], a[..., 2], a[..., 3]
     bw, bx, by, bz = b[..., 0], b[..., 1], b[..., 2], b[..., 3]
-    ox = aw * bx + ax * bw + P * ay * bz - P * az * by
-    oy = aw * by - P * ax * bz + ay * bw + P * az * bx
-    oz = aw * bz + P * ax * by - P * ay * bx + az * bw
+    ox = aw * bx + ax * bw + epsijk * ay * bz - epsijk * az * by
+    oy = aw * by - epsijk * ax * bz + ay * bw + epsijk * az * bx
+    oz = aw * bz + epsijk * ax * by - epsijk * ay * bx + az * bw
 
     # Without the P factor
     # ox = aw * bx + ax * bw + ay * bz - az * by
@@ -206,15 +207,15 @@ def qu_apply(qu: np.ndarray, point: np.ndarray) -> np.ndarray:
     # need qu_prod_axis(qu_prod_raw(qu, point_as_quaternion), qu_conj(qu))
     # do qu_prod_raw(qu, point_as_quaternion) first to get intermediate values
     iw = ax * bx - ay * by - az * bz
-    ix = aw * bx + P * ay * bz - P * az * by
-    iy = aw * by - P * ax * bz + P * az * bx
-    iz = aw * bz + P * ax * by - P * ay * bx
+    ix = aw * bx + epsijk * ay * bz - epsijk * az * by
+    iy = aw * by - epsijk * ax * bz + epsijk * az * bx
+    iz = aw * bz + epsijk * ax * by - epsijk * ay * bx
     qu_i = np.stack((iw, ix, iy, iz), -1)
 
     # next qu_prod_axis(qu_prod_raw(qu, point_as_quaternion), qu_conj(qu))
-    ox = -iw * ax +     ix * aw - P * iy * az + P * iz * ay
-    oy = -iw * ay + P * ix * az +     iy * aw - P * iz * ax
-    oz = -iw * az - P * ix * ay + P * iy * ax +     iz * aw
+    ox = -iw * ax +     ix * aw - epsijk * iy * az + epsijk * iz * ay
+    oy = -iw * ay + epsijk * ix * az +     iy * aw - epsijk * iz * ax
+    oz = -iw * az - epsijk * ix * ay + epsijk * iy * ax +     iz * aw
 
     return np.stack((ox, oy, oz), -1)
 
@@ -331,7 +332,7 @@ def qu_log(q: np.ndarray, tol=1e-6) -> np.ndarray:
     # Use the angle to get the rotation vector
     norm_v = np.linalg.norm(v, axis=-1)
     with np.errstate(divide="ignore", invalid="ignore"):
-        qlog = v * np.where(norm_v > tol, theta / norm_v, 0).reshape(-1, 1)
+        qlog = v * np.where(norm_v > tol, theta / norm_v, 0).reshape(q.shape[:-1] + (1,))
     return qlog
 
 
@@ -400,7 +401,7 @@ def qu_disorientation(
     # gather the equivalent quaternions with the largest w value for each equivalent quaternion set
     output = equivalent_quaternions[np.arange(N), row_maximum_indices]
 
-    return output.reshape(data_shape)
+    return qu_norm_std(output.reshape(data_shape))
 
 
 

@@ -32,7 +32,7 @@
 
 import numpy as np
 
-P = 1
+epsijk = 1
 
 # parameters for conversion from/to cubochoric
 sc   = np.pi**(1./6.)/6.**(1./6.)
@@ -43,13 +43,13 @@ R1   = (3.*np.pi/4.)**(1./3.)
 def qu2om(qu):
     qq = qu[...,0:1]**2-(qu[...,1:2]**2 + qu[...,2:3]**2 + qu[...,3:4]**2)
     om = np.block([qq + 2.0*qu[...,1:2]**2,
-                   2.0*(qu[...,2:3]*qu[...,1:2]-P*qu[...,0:1]*qu[...,3:4]),
-                   2.0*(qu[...,3:4]*qu[...,1:2]+P*qu[...,0:1]*qu[...,2:3]),
-                   2.0*(qu[...,1:2]*qu[...,2:3]+P*qu[...,0:1]*qu[...,3:4]),
+                   2.0*(qu[...,2:3]*qu[...,1:2]-epsijk*qu[...,0:1]*qu[...,3:4]),
+                   2.0*(qu[...,3:4]*qu[...,1:2]+epsijk*qu[...,0:1]*qu[...,2:3]),
+                   2.0*(qu[...,1:2]*qu[...,2:3]+epsijk*qu[...,0:1]*qu[...,3:4]),
                    qq + 2.0*qu[...,2:3]**2,
-                   2.0*(qu[...,3:4]*qu[...,2:3]-P*qu[...,0:1]*qu[...,1:2]),
-                   2.0*(qu[...,1:2]*qu[...,3:4]-P*qu[...,0:1]*qu[...,2:3]),
-                   2.0*(qu[...,2:3]*qu[...,3:4]+P*qu[...,0:1]*qu[...,1:2]),
+                   2.0*(qu[...,3:4]*qu[...,2:3]-epsijk*qu[...,0:1]*qu[...,1:2]),
+                   2.0*(qu[...,1:2]*qu[...,3:4]-epsijk*qu[...,0:1]*qu[...,2:3]),
+                   2.0*(qu[...,2:3]*qu[...,3:4]+epsijk*qu[...,0:1]*qu[...,1:2]),
                    qq + 2.0*qu[...,3:4]**2,
                   ]).reshape(qu.shape[:-1]+(3,3))
     return om
@@ -66,15 +66,15 @@ def qu2eu(qu):
     chi = np.sqrt(q03_s*q12_s)
 
     eu = np.where(np.abs(q12_s) < 1.0e-8,
-            np.block([np.arctan2(-P*2.0*qu[...,0:1]*qu[...,3:4],qu[...,0:1]**2-qu[...,3:4]**2),
+            np.block([np.arctan2(-epsijk*2.0*qu[...,0:1]*qu[...,3:4],qu[...,0:1]**2-qu[...,3:4]**2),
                       np.zeros(qu.shape[:-1]+(2,))]),
                   np.where(np.abs(q03_s) < 1.0e-8,
                       np.block([np.arctan2(   2.0*qu[...,1:2]*qu[...,2:3],qu[...,1:2]**2-qu[...,2:3]**2),
                                 np.broadcast_to(np.pi,qu.shape[:-1]+(1,)),
                                 np.zeros(qu.shape[:-1]+(1,))]),
-                      np.block([np.arctan2((-P*q02+q13)*chi, (-P*q01-q23)*chi),
+                      np.block([np.arctan2((-epsijk*q02+q13)*chi, (-epsijk*q01-q23)*chi),
                                 np.arctan2( 2.0*chi,          q03_s-q12_s    ),
-                                np.arctan2(( P*q02+q13)*chi, (-P*q01+q23)*chi)])
+                                np.arctan2(( epsijk*q02+q13)*chi, (-epsijk*q01+q23)*chi)])
                           )
                  )
     # reduce Euler angles to definition range
@@ -109,7 +109,7 @@ def qu2ro(qu):
                                 np.tan(np.arccos(np.clip(qu[...,0:1],-1.0,1.0)))
                                ])
                    )
-    ro[np.abs(s).squeeze(-1) < 1.0e-12] = [0.0,0.0,P,0.0]
+    ro[np.abs(s).squeeze(-1) < 1.0e-12] = [0.0,0.0,epsijk,0.0]
     return ro
 
 
@@ -168,7 +168,7 @@ def om2qu(om):
                                                  0.25 * s[3]]),
                                       )
                              )
-                    )*np.array([1,P,P,P])
+                    )*np.array([1,epsijk,epsijk,epsijk])
         qu[qu[...,0]<0] *=-1
     return qu
 
@@ -195,7 +195,7 @@ def om2eu(om):
 def om2ax(om):
     """Rotation matrix to axis angle pair."""
     #return qu2ax(om2qu(om)) # HOTFIX
-    diag_delta = -P*np.block([om[...,1,2:3]-om[...,2,1:2],
+    diag_delta = -epsijk*np.block([om[...,1,2:3]-om[...,2,1:2],
                                om[...,2,0:1]-om[...,0,2:3],
                                om[...,0,1:2]-om[...,1,0:1]
                              ])
@@ -237,9 +237,9 @@ def eu2qu(eu):
     cPhi = np.cos(ee[...,1:2])
     sPhi = np.sin(ee[...,1:2])
     qu = np.block([    cPhi*np.cos(ee[...,0:1]+ee[...,2:3]),
-                   -P*sPhi*np.cos(ee[...,0:1]-ee[...,2:3]),
-                   -P*sPhi*np.sin(ee[...,0:1]-ee[...,2:3]),
-                   -P*cPhi*np.sin(ee[...,0:1]+ee[...,2:3])])
+                   -epsijk*sPhi*np.cos(ee[...,0:1]-ee[...,2:3]),
+                   -epsijk*sPhi*np.sin(ee[...,0:1]-ee[...,2:3]),
+                   -epsijk*cPhi*np.sin(ee[...,0:1]+ee[...,2:3])])
     qu[qu[...,0]<0.0]*=-1
     return qu
 
@@ -272,9 +272,9 @@ def eu2ax(eu):
     with np.errstate(invalid='ignore',divide='ignore'):
         ax = np.where(np.broadcast_to(np.abs(alpha)<1.0e-12,eu.shape[:-1]+(4,)),
                       [0.0,0.0,1.0,0.0],
-                      np.block([-P/tau*t*np.cos(delta),
-                                -P/tau*t*np.sin(delta),
-                                -P/tau*  np.sin(sigma),
+                      np.block([-epsijk/tau*t*np.cos(delta),
+                                -epsijk/tau*t*np.sin(delta),
+                                -epsijk/tau*  np.sin(sigma),
                                  alpha
                                 ]))
     ax[(alpha<0.0).squeeze()] *=-1
@@ -286,7 +286,7 @@ def eu2ro(eu):
     ax = eu2ax(eu)
     ro = np.block([ax[...,:3],np.tan(ax[...,3:4]*.5)])
     ro[ax[...,3]>=np.pi,3] = np.inf
-    ro[np.abs(ax[...,3])<1.e-16] = [ 0.0, 0.0, P, 0.0 ]
+    ro[np.abs(ax[...,3])<1.e-16] = [ 0.0, 0.0, epsijk, 0.0 ]
     return ro
 
 
@@ -324,7 +324,7 @@ def ax2om(ax):
                    omc*ax[...,0:1]*ax[...,2:3] + s*ax[...,1:2],
                    omc*ax[...,1:2]*ax[...,2:3] - s*ax[...,0:1],
                    c+omc*ax[...,2:3]**2]).reshape(ax.shape[:-1]+(3,3))
-    return om if P < 0.0 else np.swapaxes(om,-1,-2)
+    return om if epsijk < 0.0 else np.swapaxes(om,-1,-2)
 
 
 def ax2eu(ax):
@@ -339,7 +339,7 @@ def ax2ro(ax):
                             np.inf,
                             np.tan(ax[...,3:4]*0.5))
                   ])
-    ro[np.abs(ax[...,3])<1.e-6] = [.0,.0,P,.0]
+    ro[np.abs(ax[...,3])<1.e-6] = [.0,.0,epsijk,.0]
     return ro
 
 

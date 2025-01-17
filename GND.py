@@ -1063,97 +1063,85 @@ def pseudo_inverse(A: np.ndarray) -> np.ndarray:
     return A.T.dot(np.linalg.inv(A.dot(A.T)))
 
 
-def get_completeness(grain_ids: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def get_completeness(grain_ids: np.ndarray) -> np.ndarray:
     """
-    Analyze the neighborhood type for finite difference calculations in a 3D EBSD dataset.
-    
+    Vectorized version of neighborhood analysis for 3D EBSD dataset.
+
     Args:
-        grain_ids: 3D numpy array containing grain IDs
-        
+        grain_ids (np.ndarray): The grain ID map. Shape (n_x, n_y, n_z)
+
     Returns:
-        Tuple of three 3D arrays containing DiffType enums for x, y, and z directions
-        0: constant, 1: forward, 2: backward, 3: central
+        np.ndarray: The completeness array. Shape (n_x, n_y, n_z, 3)
     """
-    # Initialize output arrays
     shape = grain_ids.shape
-    x_diffs = np.zeros(shape, dtype=np.int8)
-    y_diffs = np.zeros(shape, dtype=np.int8)
-    z_diffs = np.zeros(shape, dtype=np.int8)
     
-    # Create boolean masks for grain transitions
-    # Compute differences along each axis
-    if grain_ids.shape[0] == 1:
-        x_trans = np.ones_like(grain_ids, dtype=bool)
-    else:
-        x_trans = grain_ids[:-1,...] != grain_ids[1:,...]
-        x_trans = np.pad(x_trans, ((0,1), (0,0), (0,0)))
-    if grain_ids.shape[1] == 1:
-        y_trans = np.ones_like(grain_ids, dtype=bool)
-    else:
-        y_trans = grain_ids[:,:-1,:] != grain_ids[:,1:,:]
-        y_trans = np.pad(y_trans, ((0,0), (0,1), (0,0)))
-    if grain_ids.shape[2] == 1:
-        z_trans = np.ones_like(grain_ids, dtype=bool)
-    else:
-        z_trans = grain_ids[...,:-1] != grain_ids[...,1:]
-        z_trans = np.pad(z_trans, ((0,0), (0,0), (0,1)))
+    # Initialize output array
+    completeness = np.zeros((*shape, 3), dtype=np.int8)
     
-    # For each axis, determine the difference type based on transitions
-    completeness = []
-    for idx in tqdm(np.ndindex(shape), total=np.prod(shape), desc="Determining voxel completenesses..."):
-        i, j, k = idx
-        if grain_ids[i,j,k] == 0:
-            continue
-        
-        # X-direction analysis
-        if i == 0:
-            # print("i0", x_trans[i,j,k])
-            x_diffs[i,j,k] = 1 if not x_trans[i,j,k] else 0
-        elif i == shape[0]-1:
-            # print("iN", x_trans[i-1,j,k])
-            x_diffs[i,j,k] = 2 if not x_trans[i-1,j,k] else 0
-        else:
-            if x_trans[i-1,j,k] and x_trans[i,j,k]:
-                x_diffs[i,j,k] = 0
-            elif x_trans[i-1,j,k]:
-                x_diffs[i,j,k] = 1
-            elif x_trans[i,j,k]:
-                x_diffs[i,j,k] = 2
-            else:
-                x_diffs[i,j,k] = 3
-        
-        # Y-direction analysis
-        if j == 0:
-            y_diffs[i,j,k] = 1 if not y_trans[i,j,k] else 0
-        elif j == shape[1]-1:
-            y_diffs[i,j,k] = 2 if not y_trans[i,j-1,k] else 0
-        else:
-            if y_trans[i,j-1,k] and y_trans[i,j,k]:
-                y_diffs[i,j,k] = 0
-            elif y_trans[i,j-1,k]:
-                y_diffs[i,j,k] = 1
-            elif y_trans[i,j,k]:
-                y_diffs[i,j,k] = 2
-            else:
-                y_diffs[i,j,k] = 3
-        
-        # Z-direction analysis
-        if k == 0:
-            z_diffs[i,j,k] = 1 if not z_trans[i,j,k] else 0
-        elif k == shape[2]-1:
-            z_diffs[i,j,k] = 2 if not z_trans[i,j,k-1] else 0
-        else:
-            if z_trans[i,j,k-1] and z_trans[i,j,k]:
-                z_diffs[i,j,k] = 0
-            elif z_trans[i,j,k-1]:
-                z_diffs[i,j,k] = 1
-            elif z_trans[i,j,k]:
-                z_diffs[i,j,k] = 2
-            else:
-                z_diffs[i,j,k] = 3
-        
-    # Package into a single array
-    completeness = np.stack((x_diffs, y_diffs, z_diffs), axis=-1)
+    # Create masks for valid grain IDs
+    valid_grains = grain_ids != 0
+    
+    # Compute transitions (now using broadcasting)
+    x_trans = np.ones(shape, dtype=bool)
+    y_trans = np.ones(shape, dtype=bool)
+    z_trans = np.ones(shape, dtype=bool)
+    
+    if shape[0] > 1:
+        x_trans = np.pad(grain_ids[:-1,...] != grain_ids[1:,...], ((0,1), (0,0), (0,0)))
+    if shape[1] > 1:
+        y_trans = np.pad(grain_ids[:,:-1,:] != grain_ids[:,1:,:], ((0,0), (0,1), (0,0)))
+    if shape[2] > 1:
+        z_trans = np.pad(grain_ids[...,:-1] != grain_ids[...,1:], ((0,0), (0,0), (0,1)))
+
+    # Interior points
+    interior_mask = np.zeros_like(grain_ids, dtype=bool)
+    interior_mask[1:-1,:,:] = True
+    
+    # X-direction vectorized analysis
+    if shape[0] > 1:
+        completeness[0,:,:,0] = np.where(x_trans[0,:,:], 0, 1)   # Forward differences for first slice
+        completeness[-1,:,:,0] = np.where(x_trans[-2,:,:], 0, 2) # Backward differences for last slice
+        completeness[1:-1,:,:,0] = np.select(                    # Central differences
+            [                                  
+                (x_trans[:-2,:,:] & x_trans[1:-1,:,:]),
+                x_trans[:-2,:,:],
+                x_trans[1:-1,:,:],
+            ],
+            [0, 1, 2],
+            default=3
+        )
+    
+    # Y-direction vectorized analysis
+    if shape[1] > 1:
+        completeness[:,0,:,1] = np.where(y_trans[:,0,:], 0, 1)
+        completeness[:,-1,:,1] = np.where(y_trans[:,-2,:], 0, 2)
+        completeness[:,1:-1,:,1] = np.select(
+            [
+                (y_trans[:,:-2,:] & y_trans[:,1:-1,:]),
+                y_trans[:,:-2,:],
+                y_trans[:,1:-1,:]
+            ],
+            [0, 1, 2],
+            default=3
+        )
+    
+    # Z-direction (similar logic)
+    if shape[2] > 1:
+        completeness[:,:,0,2] = np.where(z_trans[:,:,0], 0, 1)
+        completeness[:,:,-1,2] = np.where(z_trans[:,:,-2], 0, 2)
+        completeness[:,:,1:-1,2] = np.select(
+            [
+                (z_trans[:,:,:-2] & z_trans[:,:,1:-1]),
+                z_trans[:,:,:-2],
+                z_trans[:,:,1:-1]
+            ],
+            [0, 1, 2],
+            default=3
+        )
+    
+    # Zero out values where grain_id is 0
+    completeness[~valid_grains] = 0
+    
     return completeness
 
 
@@ -1166,9 +1154,6 @@ def get_neighbors(completeness: np.ndarray) -> np.ndarray:
     shifts0 = np.zeros((3,) + shape + (3,), dtype=np.int32)
     shifts1 = np.zeros((3,) + shape + (3,), dtype=np.int32)
     scale = np.zeros(shape + (3,), dtype=np.float32)
-    
-    # Get size of numpy rray in memory
-    b_v = (completeness.nbytes + shifts0.nbytes + shifts1.nbytes + scale.nbytes) / np.prod(shape)
 
     # Only central and backward differences will have a shift in the first point
     shifts0[0][(completeness[..., 0] == 2) | (completeness[..., 0] == 3)] = [-1, 0, 0]
@@ -1256,20 +1241,19 @@ def get_orientation_gradients(quats: np.ndarray, pts0: np.ndarray, pts1: np.ndar
     shape = quats.shape[:-1]
     
     # Run calculations in parallel, split up by the z-axis
-    with mp.Pool(processes=n_cpus) as pool:
-        results = list(
-            tqdm(
-                pool.imap(
-                    get_rotation_vectors,
-                    [(quats[i], pts0[i], pts1[i], cs) for i in range(shape[0])],
-                ),
-                total=shape[0],
-                desc="Calculating Orientation Gradients",
-            )
-        )
-
-    # Combine the results
-    rot_vectors = np.stack(results, axis=0)
+    # with mp.Pool(processes=n_cpus) as pool:
+    #     results = list(
+    #         tqdm(
+    #             pool.imap(
+    #                 get_rotation_vectors,
+    #                 [(quats[i], pts0[i], pts1[i], cs) for i in range(shape[0])],
+    #             ),
+    #             total=shape[0],
+    #             desc="Calculating Orientation Gradients",
+    #         )
+    #     )
+    # rot_vectors = np.stack(results, axis=0).reshape(shape + (3, 3))
+    rot_vectors = get_rotation_vectors(quats, pts0, pts1, cs)
 
     # Get the misorientations from the rotation vectors
     misorientation = np.linalg.norm(rot_vectors, axis=-1)
@@ -1277,12 +1261,14 @@ def get_orientation_gradients(quats: np.ndarray, pts0: np.ndarray, pts1: np.ndar
     # Get the orientation gradients
     gradient_tensors = np.zeros_like(rot_vectors)
     m = misorientation != 0
-    gradient_tensors[m] = rot_vectors[m] / misorientation[m][..., None]
+    print(gradient_tensors.shape, rot_vectors.shape, distances.shape)
+    print(gradient_tensors[m].shape, rot_vectors[m].shape, distances[m].shape)
+    print(distances[m][..., None].shape)
+    gradient_tensors[m] = rot_vectors[m] / distances[m][..., None]
 
     return gradient_tensors, misorientation
     
 
-# def get_rotation_vectors(quats: np.ndarray, pts0: np.ndarray, pts1: np.ndarray, cs: int) -> np.ndarray:
 def get_rotation_vectors(*args) -> np.ndarray:
     """Calculate the orientation gradients for a 3D EBSD dataset.
     This is essentially the rotation vectors corresponding to the disorientation between neighboring voxels,
@@ -1307,6 +1293,15 @@ def get_rotation_vectors(*args) -> np.ndarray:
         quats, pts0, pts1, cs = args[0]
     else:
         quats, pts0, pts1, cs = args
+    if quats.shape[:-1] != pts0.shape[:-2] or quats.shape[:-1] != pts1.shape[:-2]:
+        raise ValueError("Quaternions and points must have the same shape.")
+
+    # Make sure the data is 3D
+    if quats.ndim != 4:
+        quats = quats[np.newaxis, ...]
+        pts0 = pts0[np.newaxis, ...]
+        pts1 = pts1[np.newaxis, ...]
+
     # Handle the crystal structure
     if cs not in [1, 2, 3]:
         raise ValueError("Crystal structure must be 1, 2, or 3.")
@@ -1319,21 +1314,20 @@ def get_rotation_vectors(*args) -> np.ndarray:
     shape = quats.shape[:-1]
 
     # Create global mask
-    mask = np.all(pts0 != pts1, axis=-1)
+    valid = np.any(pts0 != pts1, axis=-1)
 
     # Create the output arrays
-    rot_vectors = np.zeros(shape + (3, 3), dtype=np.float32)
+    dis_quats = np.stack([np.zeros_like(quats), np.zeros_like(quats), np.zeros_like(quats)], axis=0)
     for i in range(3):
         # Create a mask of where the two points are not the same
-        m = mask[..., i]
+        m = valid[..., i]
         if not np.any(m):
             continue
-        q0 = quats[tuple(pts0[:, :, :, i].reshape(-1, 3).T)]  # (X*Y*Z, 4)
-        q1 = quats[tuple(pts1[:, :, :, i].reshape(-1, 3).T)]  # (X*Y*Z, 4)
-        q_dis = quaternions.qu_disorientation(q0[m.flatten()], q1[m.flatten()], laue_id, laue_id)  # (X*Y*Z, 4)
-        rot_vectors[m][..., i] = quaternions.qu_log(q_dis) * 2  # (X*Y*Z, 3)
-
-    return rot_vectors
+        q0 = quats[tuple(pts0[m][:, i].reshape(-1, 3).T)]  # (X*Y*Z, 4)
+        q1 = quats[tuple(pts1[m][:, i].reshape(-1, 3).T)]  # (X*Y*Z, 4)
+        dis_quats[i, m] = quaternions.qu_disorientation(q0, q1, laue_id, laue_id)  # (X*Y*Z, 4)
+    rot_vectors = quaternions.qu_log(dis_quats) * 2  # (3, X, Y, Z, 3)
+    return rot_vectors.transpose(1, 2, 3, 0, 4)
 
 
 def minimize(alpha, cs, A, B, burgers, minimization='l2') -> np.ndarray:
@@ -1357,7 +1351,6 @@ def minimize(alpha, cs, A, B, burgers, minimization='l2') -> np.ndarray:
             else:
                 dd = dd/burgers
         else:
-            print(B.shape, Lambda.shape)
             dd = B.dot(Lambda)/burgers  # same as matmul
                 
     elif minimization == 'l1':
@@ -1388,8 +1381,9 @@ def minimize(alpha, cs, A, B, burgers, minimization='l2') -> np.ndarray:
 
 if __name__ == "__main__":
     import utillities as utils
+    import matplotlib.pyplot as plt
 
-    which = "3D"
+    which = "2D"
 
     cs = 1
     minimization = 'l2'
@@ -1399,8 +1393,8 @@ if __name__ == "__main__":
         path = "E:/rolled_Al/merged_1x1.ang"
         burgers = 2.86e-10
         euler, ids, spacing = utils.read_ang(path)
-        euler = euler[:, 200:250, 200:250]
-        ids = ids[:, 200:250, 200:250]
+        euler = euler[:, :300, :300]
+        ids = ids[:, :300, :300]
 
     elif which == "3D":
         path = "D:/Research/CoNi_90/Data/3D/CoNi90.dream3d"
@@ -1431,8 +1425,31 @@ if __name__ == "__main__":
     alpha = dphi.transpose(0, 1, 2, 4, 3) - trace[..., None, None]
     print("Alpha time:", time.time() - t0)
 
-    # t0 = time.time()
-    # dd = minimize(alpha, cs, A, B, burgers, minimization)
-    # dd = np.abs(dd)
-    # print("Minimization time:", time.time() - t0)
+    t0 = time.time()
+    dd = minimize(alpha, cs, A, B, burgers, minimization)
+    dd = np.abs(dd)
+    print("Minimization time:", time.time() - t0)
+
+    print("Misorientation", mis.min(), mis.mean(), mis.max())
+    print("Dislocation Density", dd.min(), dd.mean(), dd.max())
+
+    avg_mis = np.rad2deg(np.mean(mis, axis=-1))
+
+    dd_total = np.sum(dd, axis=-1)
+    dd_total = np.log10(dd_total + 1e-6)
+
+    fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+    im_mis = ax[0].imshow(avg_mis[0], cmap='viridis')
+    im_gnd = ax[1].imshow(dd_total[0], cmap='RdBu_r')
+
+    plt.tight_layout()
+    plt.subplots_adjust(right=0.89, wspace=0.5)
+    l = ax[0].get_position()
+    cbar_ax = fig.add_axes([l.x1 + 0.01, l.y0, 0.02, l.height])
+    fig.colorbar(im_mis, cax=cbar_ax, label="Misorientation (degrees)")
+    l = ax[1].get_position()
+    cbar_ax = fig.add_axes([l.x1 + 0.01, l.y0, 0.02, l.height])
+    fig.colorbar(im_gnd, cax=cbar_ax, label="Log10(Dislocation Density)")
+    plt.show()
+    
     
