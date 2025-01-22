@@ -9,7 +9,7 @@ import mpire
 import configparser
 import argparse
 
-import segment_grains as sg
+import utillities as ut
 import py_functions as pf
 import GND
 
@@ -36,47 +36,10 @@ elif cs.lower() == 'bcc': cs = 2
 elif cs.lower() == 'hcp': cs = 3
 else: raise ValueError("The crystallography entry in the config file was not one of the following ['fcc', 'bcc', 'hcp'].")
 
-def read_ang(path, segment=False):
-    """Reads an ang file into a numpy array"""
-    num_header_lines = 0
-    col_names = None
-    with open(path, "r") as f:
-        for line in f:
-            if line[0] == "#":
-                num_header_lines += 1
-                if "NCOLS_ODD" in line:
-                    ncols = int(line.split(": ")[1].strip())
-                elif "NROWS" in line:
-                    nrows = int(line.split(": ")[1].strip())
-                elif "COLUMN_HEADERS" in line:
-                    col_names = line.split(": ")[1].strip().split(", ")
-                elif "XSTEP" in line:
-                    res = float(line.split(": ")[1].strip())
-            else:
-                break
-    if col_names is None:
-        col_names = ["phi1", "PHI", "phi2", "x", "y", "IQ", "CI", "Phase index"]
-    raw_data = np.genfromtxt(path, skip_header=num_header_lines)
-    n_entries = raw_data.shape[-1]
-    if raw_data.shape[0] == ncols * nrows:
-        data = raw_data.reshape((nrows, ncols, n_entries))
-    elif raw_data.shape != ncols * nrows:
-        raise ValueError(f"The number of data points ({raw_data.size}) does not match the expected grid ({nrows} rows, {ncols} cols, {ncols * nrows} total points). ")
-        
-    out = {col_names[i]: data[:, :, i] for i in range(n_entries)}
-    eulerangles = np.array([out["phi1"], out["PHI"], out["phi2"]]).T.astype(float)
-    if segment:
-        featIDs = sg.segment(eulerangles, angle_threshold=5)
-    else:
-        featIDs = np.ones(eulerangles.shape[:-1], dtype=int)
-    eulerangles = eulerangles.reshape(1, *eulerangles.shape)
-    featIDs = featIDs.reshape(1, *featIDs.shape)
-    spacing = np.array([res, res, res])
-    return eulerangles, featIDs, spacing
 
 def main(path, segment=False):
     # Read data
-    euler, featIDs, spacing = read_ang(path, segment=segment)
+    euler, featIDs, spacing = ut.read_ang(path, segment=segment)
     spacing *= 1e-6
     print("\tSpacing (m):", spacing)
     print("\tTotal number of points:", featIDs.size)
@@ -153,8 +116,8 @@ if __name__ == '__main__':
 
     
     with mpire.WorkerPool(n_jobs=n_processors, start_method="spawn") as pool:
-        results = pool.map(gnd.test, coords, progress_bar=True)
-        # results = pool.map(gnd.compute, coords, progress_bar=True)
+        # results = pool.map(gnd.test, coords, progress_bar=True)
+        results = pool.map(gnd.compute, coords, progress_bar=True)
 
     gnd.unpack_data(results)
     print("\t-> Calculation complete.")
@@ -171,17 +134,17 @@ if __name__ == '__main__':
     gnd_ms[slice_x1, slice_x2, slice_x3] = gnd.misori
     gnd_ss[slice_x1, slice_x2, slice_x3] = gnd.GND_SS
 
-    print("Mis", np.rad2deg(np.nanmin(gnd_ms)), np.rad2deg(np.nanmax(gnd_ms)))
-    print("SR", gnd_sr.min() / 1e12, gnd_sr.max() / 1e12)
-    import matplotlib.pyplot as plt
-    fig, ax = plt.subplots(1, 2, figsize=(12, 6), sharex=True, sharey=True)
-    ax[0].imshow(gnd_sr[0].T / 1e12, cmap='RdBu_r', vmax=1000)
-    ax[0].set_title("GND_SR")
-    ax[1].imshow(np.rad2deg(gnd_ms[0].T), cmap='jet', vmin=0.0, vmax=4.89)
-    ax[1].set_title("Misorientation")
-    plt.tight_layout()
-    plt.show()
-    exit()
+    # print("Mis", np.rad2deg(np.nanmin(gnd_ms)), np.rad2deg(np.nanmax(gnd_ms)))
+    # print("SR", gnd_sr.min() / 1e12, gnd_sr.max() / 1e12)
+    # import matplotlib.pyplot as plt
+    # fig, ax = plt.subplots(1, 2, figsize=(12, 6), sharex=True, sharey=True)
+    # ax[0].imshow(gnd_sr[0].T / 1e12, cmap='RdBu_r', vmax=1000)
+    # ax[0].set_title("GND_SR")
+    # ax[1].imshow(np.rad2deg(gnd_ms[0].T), cmap='jet', vmin=0.0, vmax=4.89)
+    # ax[1].set_title("Misorientation")
+    # plt.tight_layout()
+    # plt.show()
+    # exit()
         
     print("\t-> Saving data.")
     np.save(directory + ID + "_GND_SR.npy", gnd_sr)

@@ -1214,7 +1214,16 @@ def get_finite_difference_coordinates(grain_ids: np.ndarray) -> Tuple[np.ndarray
     return (coords0, coords1, scale)
 
 
-def get_orientation_gradients(quats: np.ndarray, pts0: np.ndarray, pts1: np.ndarray, distances: np.ndarray, cs: int, n_cpus: int = None) -> np.ndarray:
+def get_orientation_gradients(
+    quats: np.ndarray,
+    pts0: np.ndarray,
+    pts1: np.ndarray,
+    distances: np.ndarray,
+    cs: int,
+    n_cpus: int = 1,
+    chunk_size: int = None,
+    progress_bar: bool = False
+    ) -> np.ndarray:
     """Calculate the orientation gradients for a 3D EBSD dataset.
     This is essentially the rotation vectors corresponding to the disorientation between neighboring voxels,
     divided by the spacing along each dimension. The result is a 3x3 matrix for each voxel.
@@ -1234,96 +1243,81 @@ def get_orientation_gradients(quats: np.ndarray, pts0: np.ndarray, pts1: np.ndar
           This is essectially 3 rotation vectors corresponding to the disorientation between neighboring voxels,
           each divided by the distance between the finite difference pair. The 3x3 matrix for each point is the rotation vector for each axis.
     """
-    # Get the cpus
-    if n_cpus is None:
-        n_cpus = os.cpu_count() - 1
-
     # Get the shape
-    shape = quats.shape[:-1]
-    
-    # Run calculations in parallel, split up by the z-axis
-    # with mp.Pool(processes=n_cpus) as pool:
-    #     results = list(
-    #         tqdm(
-    #             pool.imap(
-    #                 get_rotation_vectors,
-    #                 [(quats[i], pts0[i], pts1[i], cs) for i in range(shape[0])],
-    #             ),
-    #             total=shape[0],
-    #             desc="Calculating Orientation Gradients",
-    #         )
-    #     )
-    # rot_vectors = np.stack(results, axis=0).reshape(shape + (3, 3))
-    rot_vectors = get_rotation_vectors(quats, pts0, pts1, cs)
+    out_shape = quats.shape[:-1]
+
+    # Reshape the data to be 1D
+    quats = quats.reshape(-1, 4)
+    pts0 = pts0.reshape(-1, 3, 3)
+    pts1 = pts1.reshape(-1, 3, 3)
+    distances = distances.reshape(-1, 3)
+
+    # Convert points to raveled indices
+    pts0 = np.stack([
+        np.ravel_multi_index(pts0[:, 0].T, out_shape),
+        np.ravel_multi_index(pts0[:, 1].T, out_shape),
+        np.ravel_multi_index(pts0[:, 2].T, out_shape)
+    ], axis=-1)
+    pts1 = np.stack([
+        np.ravel_multi_index(pts1[:, 0].T, out_shape),
+        np.ravel_multi_index(pts1[:, 1].T, out_shape),
+        np.ravel_multi_index(pts1[:, 2].T, out_shape)
+    ], axis=-1)
+
+    # Get quaternion pairs
+    q0 = np.stack([quats[pts0[:, 0]], quats[pts0[:, 1]], quats[pts0[:, 2]]], axis=1)  # (n_pairs, 3, 4)
+    q1 = np.stack([quats[pts1[:, 0]], quats[pts1[:, 1]], quats[pts1[:, 2]]], axis=1)  # (n_pairs, 3, 4)
+
+    # Get laue_id
+    laue_id = 11 if cs == 1 or cs == 2 else 9
+
+    if n_cpus == 1:
+        quats_disorientation = quaternions.qu_disorientation(q0, q1, laue_id, laue_id).transpose(1, 0, 2)
+    else:
+        # Setup chunk size
+        if chunk_size is None:
+            chunk_size = max(1, quats.shape[0] // (n_cpus * 4))
+
+        # Split the data into chunks
+        q0 = np.array_split(q0, q0.shape[0] // chunk_size)
+        q1 = np.array_split(q1, q1.shape[0] // chunk_size)
+        chunks = zip(q0, q1)
+
+        # Add progress bar if desired
+        if progress_bar:
+            chunks = tqdm(
+                chunks,
+                total=len(q0),
+                desc="Calculating Orientation Gradients",
+            )
+
+        # Run calculations in parallel
+        with Parallel(n_jobs=n_cpus) as parallel:
+            quats_disorientation = parallel(
+                delayed(quaternions.qu_disorientation)(q0, q1, laue_id, laue_id)
+                for q0, q1 in chunks
+            )
+
+        # Concatenate the results
+        quats_disorientation = np.concatenate(quats_disorientation, axis=0).transpose(1, 0, 2)
+
+
+    # Convert quaternions to rotation vectors
+    rot_vectors = quaternions.qu_log(quats_disorientation) * 2
 
     # Get the misorientations from the rotation vectors
     misorientation = np.linalg.norm(rot_vectors, axis=-1)
+    misorientation
 
     # Get the orientation gradients
-    gradient_tensors = np.zeros_like(rot_vectors)
-    m = misorientation != 0
-    gradient_tensors[m] = rot_vectors[m] / distances[m][..., None]
+    with np.errstate(divide='ignore', invalid='ignore'):
+        gradient_tensors = np.where((misorientation == 0).reshape(3,-1, 1), 0, rot_vectors / distances.T[..., None])
 
+    # Reshape the output
+    gradient_tensors = gradient_tensors.transpose(1, 0, 2).reshape(out_shape + (3, 3))
+    misorientation = misorientation.T.reshape(out_shape + (3,))
     return gradient_tensors, misorientation
     
-
-def get_rotation_vectors(*args) -> np.ndarray:
-    """Calculate the orientation gradients for a 3D EBSD dataset.
-    This is essentially the rotation vectors corresponding to the disorientation between neighboring voxels,
-    divided by the spacing along each dimension. The result is a 3x3 matrix for each voxel.
-    Note that the arguments are passed as a single tuple to allow for parallel processing,
-    but the function can also be called with the arguments passed individually.
-
-    Args:
-        quats: 3D numpy array containing quaternions, (X, Y, Z, 4)
-        pts0: 3D numpy array containing the coordinates of the first voxel in the finite difference pairs, (X, Y, Z, 3)
-        pts1: 3D numpy array containing the coordinates of the second voxel in the finite difference pairs, (X, Y, Z, 3)
-        distances: 3D numpy array containing the distances between the finite difference pairs, (X, Y, Z, 3)
-        cs: The crystal structure of the material. 1 for FCC, 2 for BCC, 3 for HCP.
-
-    Returns:
-        3D numpy array containing the orientation gradients, (X, Y, Z, 3, 3)
-          This is essectially 3 rotation vectors corresponding to the disorientation between neighboring voxels,
-          each divided by the distance between the finite difference pair. The 3x3 matrix for each point is the rotation vector for each axis.
-    """
-    # Handle the arguments
-    if len(args) == 1:
-        quats, pts0, pts1, cs = args[0]
-    else:
-        quats, pts0, pts1, cs = args
-    if quats.shape[:-1] != pts0.shape[:-2] or quats.shape[:-1] != pts1.shape[:-2]:
-        raise ValueError("Quaternions and points must have the same shape.")
-
-    # Make sure the data is 3D
-    if quats.ndim != 4:
-        quats = quats[np.newaxis, ...]
-        pts0 = pts0[np.newaxis, ...]
-        pts1 = pts1[np.newaxis, ...]
-
-    # Handle the crystal structure
-    if cs not in [1, 2, 3]:
-        raise ValueError("Crystal structure must be 1, 2, or 3.")
-    elif cs == 1 or cs == 2:
-        laue_id = 11
-    else:
-        laue_id = 9
-
-    # Create global mask
-    valid = np.any(pts0 != pts1, axis=-1)
-
-    # Create the output arrays
-    dis_quats = np.stack([np.zeros_like(quats), np.zeros_like(quats), np.zeros_like(quats)], axis=0)
-    for i in range(3):
-        # Create a mask of where the two points are not the same
-        m = valid[..., i]
-        if not np.any(m):
-            continue
-        q0 = quats[tuple(pts0[m][:, i].reshape(-1, 3).T)]  # (X*Y*Z, 4)
-        q1 = quats[tuple(pts1[m][:, i].reshape(-1, 3).T)]  # (X*Y*Z, 4)
-        dis_quats[i, m] = quaternions.qu_disorientation(q0, q1, laue_id, laue_id)  # (X*Y*Z, 4)
-    rot_vectors = quaternions.qu_log(dis_quats) * 2  # (3, X, Y, Z, 3)
-    return rot_vectors.transpose(1, 2, 3, 0, 4)
-
 
 def _minimize_l2(Lambda: np.ndarray, B: np.ndarray) -> np.ndarray:
     """Perform the minimization using the L2 norm.
@@ -1369,8 +1363,11 @@ def _minimize_l1(Lambda: np.ndarray, A: np.ndarray) -> np.ndarray:
     return dd
 
 
-def minimize(alpha, cs, A, B, burgers, minimization='l2', n_cpus=None, chunk_size=None) -> np.ndarray:
+def minimize(alpha, cs, A, B, burgers, minimization='l2', n_cpus=1, chunk_size=None, progress_bar=False) -> np.ndarray:
     """Minimize the dislocation density using the given minimization scheme.
+    The equation to be solved is A*rho = Lambda, where A is the A matrix, rho is the dislocation density, and Lambda is the Nye tensor.
+    This is solved directly using L2 minimization with the pseudo-inverse of A.
+    This can also be solved using L1 minimization, which is done in parallel for each point in the Nye tensor.
     
     Args:
         alpha: The Nye tensor components. Shape (..., 3, 3)
@@ -1378,7 +1375,13 @@ def minimize(alpha, cs, A, B, burgers, minimization='l2', n_cpus=None, chunk_siz
         A: The A matrix. Shape (9, n_slip_systems)
         B: The B matrix, psuedo-inverse of A. Shape (n_slip_systems, 9)
         burgers: The burgers vector for the material.
-                 For HCP with pyramidal slip systems, this should be a tuple of the two burgers vectors."""
+                 For HCP with pyramidal slip systems, this should be a tuple of the two burgers vectors.
+        minimization: The minimization scheme to use. Either 'l2' or 'l1'.
+        n_cpus: The number of CPUs to use for parallel processing during L1 minimization.
+                If None, all available CPUs minus one will be used. Not used for L2 minimization.
+        chunk_size: The size of the chunks to process in parallel during L1 minimization.
+                    Default chunk size is max(1, n_voxels / (4 * n_cpus)).
+        progress_bar: Whether to display a progress bar during L1 minimization."""
     # Equation to be solved -> A*rho[array form] = Lambda[Nye in array form] 
     # Solve: A*rho = Lambd
     # Nye tensor must be converted into array form Lambda
@@ -1390,10 +1393,6 @@ def minimize(alpha, cs, A, B, burgers, minimization='l2', n_cpus=None, chunk_siz
         dd = _minimize_l2(Lambda, B).reshape(out_shape)
 
     elif minimization == 'l1':
-        # Setup parallel processing parameters
-        if n_cpus is None:
-            n_cpus = os.cpu_count() - 1
-
         # Setup chunk size
         if chunk_size is None:
             chunk_size = max(1, Lambda.shape[0] // (n_cpus * 4))
@@ -1401,12 +1400,16 @@ def minimize(alpha, cs, A, B, burgers, minimization='l2', n_cpus=None, chunk_siz
         # Split into chunks
         chunks = np.array_split(Lambda, Lambda.shape[0] // chunk_size)
 
+        # Add progress bar if desired
+        if progress_bar:
+            chunks = tqdm(chunks, desc="Minimizing (L1) chunks")
+
         # Process chunks in parallel
         with Parallel(n_jobs=n_cpus) as parallel:
             chunk_results = parallel(
                 delayed(_minimize_l1)(
                     chunk, A
-                ) for chunk in tqdm(chunks, desc="Minimizing (L1) chunks")
+                ) for chunk in chunks
             )
         
         # Combine the results
@@ -1473,13 +1476,15 @@ if __name__ == "__main__":
     which = "2D"
 
     cs = 1
-    minimization = 'l1'
-    n_cpus = 1
+    minimization = 'l2'
+    n_cpus = 10
+    progress_bar = False
 
     if which == "2D":
         path = "E:/rolled_Al/merged_1x1.ang"
+        ids_path = "E:/rolled_Al/FeatureIDs.npy"
         burgers = 2.86e-10
-        euler, ids, spacing = utils.read_ang(path)
+        euler, ids, spacing = utils.read_ang(path, ids_path)
         # euler = euler[:, :100, :100]
         # ids = ids[:, :100, :100]
 
@@ -1499,29 +1504,44 @@ if __name__ == "__main__":
     print(" ")
     np.set_printoptions(linewidth=200)
 
-    t0 = time.time()
     nbrs0, nbrs1, distances = get_finite_difference_coordinates(ids)
     distances *= spacing
-    print("Neighbors time:", time.time() - t0)
     
-    t0 = time.time()
-    dphi, mis = get_orientation_gradients(quats, nbrs0, nbrs1, distances, cs, n_cpus)
-    print("Orientation gradients time:", time.time() - t0)
+    dphi, mis = get_orientation_gradients(quats, nbrs0, nbrs1, distances, cs, n_cpus, progress_bar=progress_bar)
     
-    t0 = time.time()
+    np.save(
+        os.path.join(
+            os.path.dirname(path),
+            f"misorientation.npy"),
+        mis
+    )
+    
     trace = np.trace(dphi, axis1=3, axis2=4)
     alpha = dphi.transpose(0, 1, 2, 4, 3) - trace[..., None, None]
-    print("Alpha time:", time.time() - t0)
 
-    t0 = time.time()
-    dd = minimize(alpha, cs, A, B, burgers, minimization)
+    minimization = 'l1'
+    dd = minimize(alpha, cs, A, B, burgers, minimization, n_cpus, progress_bar=progress_bar)
     dd = np.abs(dd)
-    print("Minimization time:", time.time() - t0)
 
-    print("Total time:", time.time() - T)
+    np.save(
+        os.path.join(
+            os.path.dirname(path),
+            f"dd_{minimization}.npy"),
+        dd
+    )
 
-    print("Misorientation", mis.min(), mis.mean(), mis.max())
-    print("Dislocation Density", dd.min(), dd.mean(), dd.max())
+    minimization = 'l2'
+    dd = minimize(alpha, cs, A, B, burgers, minimization, n_cpus, progress_bar=progress_bar)
+    dd = np.abs(dd)
+
+    np.save(
+        os.path.join(
+            os.path.dirname(path),
+            f"dd_{minimization}.npy"),
+        dd
+    )
+
+    exit()
 
     avg_mis = np.rad2deg(np.mean(mis, axis=-1))
 
@@ -1529,17 +1549,17 @@ if __name__ == "__main__":
     dd_total = np.log10(dd_total + 1e-6)
 
     fig, ax = plt.subplots(1, 2, figsize=(10, 5))
-    im_mis = ax[0].imshow(avg_mis[0], cmap='viridis')
+    im_mis = ax[0].imshow(avg_mis[0], cmap='jet')
     im_gnd = ax[1].imshow(dd_total[0], cmap='RdBu_r')
-
     plt.tight_layout()
     plt.subplots_adjust(right=0.89, wspace=0.5)
     l = ax[0].get_position()
     cbar_ax = fig.add_axes([l.x1 + 0.01, l.y0, 0.02, l.height])
-    fig.colorbar(im_mis, cax=cbar_ax, label="Misorientation (degrees)")
+    fig.colorbar(im_mis, cax=cbar_ax, label=r"Misorientation ($\degree$)")
     l = ax[1].get_position()
     cbar_ax = fig.add_axes([l.x1 + 0.01, l.y0, 0.02, l.height])
-    fig.colorbar(im_gnd, cax=cbar_ax, label="Log10(Dislocation Density)")
+    fig.colorbar(im_gnd, cax=cbar_ax, label=r"$\rho^{GND}\;(m^{-2})$")
+    utils.make_axis_log(cbar_ax, 'y')
     plt.show()
     
     

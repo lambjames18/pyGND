@@ -1,8 +1,10 @@
+import matplotlib.pyplot as plt
+import matplotlib as mpl
 import numpy as np
 import h5py
 
 
-def read_ang(path):
+def read_ang(path, ids_path=None):
     """Reads an ang file into a numpy array"""
     num_header_lines = 0
     col_names = None
@@ -31,11 +33,13 @@ def read_ang(path):
         
     out = {col_names[i]: data[:, :, i] for i in range(n_entries)}
     eulerangles = np.array([out["phi1"], out["PHI"], out["phi2"]]).T.astype(float)
-    featIDs = np.ones(eulerangles.shape[:-1], dtype=int)
-    eulerangles = eulerangles.reshape(1, *eulerangles.shape)
-    featIDs = featIDs.reshape(1, *featIDs.shape)
+    eulerangles = eulerangles.reshape(1, *eulerangles.shape).transpose(0, 2, 1, 3)
+    if ids_path is not None:
+        ids = np.load(ids_path).reshape(eulerangles.shape[:-1])
+    else:
+        ids = np.ones(eulerangles.shape[:-1], dtype=int)
     spacing = np.array([res, res, res])
-    return eulerangles, featIDs, spacing
+    return eulerangles, ids, spacing
 
 
 def read_dream3d(path: str, ids_path: str = None, euler_path: str = None, res_path: str = None):
@@ -64,4 +68,88 @@ def read_dream3d(path: str, ids_path: str = None, euler_path: str = None, res_pa
         raise KeyError(f"Could not find the SPACING array at the path {res_path} wihtin the dream3d file.")
 
     return eulerangles, ids, spacing
-    
+
+
+def standardize_axis(ax, grid=True, **kwargs):
+    kwargs["labelsize"] = kwargs.get("labelsize", 20)
+    kwargs["labelcolor"] = kwargs.get("labelcolor", "k")
+    kwargs["direction"] = kwargs.get("direction", "in")
+    kwargs["top"] = kwargs.get("top", True)
+    kwargs["right"] = kwargs.get("right", True)
+    ax.tick_params(axis="both", which="both", **kwargs)
+    if grid:
+        ax.grid(alpha=0.3, which="major")
+        ax.grid(alpha=0.1, which="minor")
+        ax.set_axisbelow(True)
+
+
+def make_legend(ax, **kwargs):
+    kwargs["bbox_to_anchor"] = kwargs.get("bbox_to_anchor", (1.03, 1.05))
+    kwargs["loc"] = kwargs.get("loc", "upper right")
+    kwargs["fontsize"] = kwargs.get("fontsize", 15)
+    kwargs["shadow"] = kwargs.get("shadow", True)
+    kwargs["framealpha"] = kwargs.get("framealpha", 1)
+    kwargs["fancybox"] = kwargs.get("fancybox", False)
+    ax.legend(**kwargs)
+
+
+def make_axis_log(ax, axis="x"):
+    """Make an axis logarithmic."""
+    if axis in ["x", "both"]:
+        ax.xaxis.set_major_formatter(mpl.ticker.StrMethodFormatter("$10^{{{x:.0f}}}$"))
+        xmin, xmax = ax.get_xlim()
+        tick_range = np.arange(np.ceil(xmin), np.floor(xmax) + 1)
+        tick_range_minor = np.arange(np.floor(xmin), np.ceil(xmax) + 1)
+        ax.xaxis.set_ticks(tick_range)
+        minor_ticks = []
+        for p in tick_range_minor:
+            for x in np.linspace(10 ** p, 10 ** (p + 1), 10):
+                if np.log10(x) >= xmin and np.log10(x) <= xmax:
+                    minor_ticks.append(np.log10(x))
+        ax.xaxis.set_ticks(minor_ticks, minor=True)
+    if axis in ["y", "both"]:
+        ax.yaxis.set_major_formatter(mpl.ticker.StrMethodFormatter("$10^{{{x:.0f}}}$"))
+        ymin, ymax = ax.get_ylim()
+        tick_range = np.arange(np.ceil(ymin), np.floor(ymax) + 1)
+        tick_range_minor = np.arange(np.floor(ymin), np.ceil(ymax) + 1)
+        ax.yaxis.set_ticks(tick_range)
+        minor_ticks = []
+        for p in tick_range_minor:
+            for y in np.linspace(10 ** p, 10 ** (p + 1), 10):
+                if np.log10(y) >= ymin and np.log10(y) <= ymax:
+                    minor_ticks.append(np.log10(y))
+        ax.yaxis.set_ticks(minor_ticks, minor=True)
+
+
+def view(arr, title, cmap, vmin=None, vmax=None, log=False):
+    if vmin is None:
+        vmin = np.nanmin(arr)
+    if vmax is None:
+        vmax = np.nanmax(arr)
+    fig, ax = plt.subplots(1, 1, figsize=(3.9, 3), dpi=300)
+    im = ax.imshow(arr, cmap=cmap, vmin=vmin, vmax=vmax)
+    ax.axis('off')
+    plt.tight_layout()
+    plt.subplots_adjust(left=0.02, right=0.78, top=0.98, bottom=0.02)
+    l = ax.get_position()
+    cax = fig.add_axes([l.x1 + 0.01, l.y0, 0.02, l.height])
+    fig.colorbar(im, cax=cax, label=title)
+    if log:
+        make_axis_log(cax, "y")
+    plt.show()
+
+
+def view_simple(arr, cmap, save_path=None, vmin=None, vmax=None):
+    if vmin is None:
+        vmin = np.nanmin(arr)
+    if vmax is None:
+        vmax = np.nanmax(arr)
+    size = (arr.shape[1] / 300, arr.shape[0] / 300)
+    fig, ax = plt.subplots(1, 1, figsize=size, dpi=300)
+    ax.imshow(arr, cmap=cmap, vmin=vmin, vmax=vmax)
+    ax.axis('off')
+    plt.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.0)
+    if save_path is not None:
+        plt.savefig(save_path)
+    else:
+        plt.show()

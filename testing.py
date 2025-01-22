@@ -1,75 +1,86 @@
+from tqdm.auto import tqdm
+import utillities as ut
 import matplotlib.pyplot as plt
 import numpy as np
-import time
-import memory_profiler
-import h5py
+from skimage import io
 
-from GND import get_finite_difference_coordinates
+import quaternions as qpy
+import rotations
+import utillities as ut
 
+eu, ids, s = ut.read_ang("E:/rolled_al/merged_1x1.ang", "E:/rolled_al/FeatureIDs.npy")
+dd_l1_new = np.log10(np.clip(np.load("E:/rolled_al/dd_l1.npy").mean(axis=0)[0], 1, None))
+dd_l2_new = np.log10(np.clip(np.load("E:/rolled_al/dd_l2.npy").mean(axis=0)[0], 1, None))
+dd_l2_old = np.log10(np.clip(np.load("E:/rolled_al/dd_l2_old.npy").mean(axis=-1)[0], 1, None))
+misori = np.rad2deg(np.load("E:/rolled_al/misorientation.npy").mean(axis=-1)[0])
 
-def main(ids):
-    # process the array
-    get_finite_difference_coordinates(ids)
-
-
-if __name__ == "__main__":
-    interval = 0.01
-    iterations = 3
-    sizes = [20, 50, 100, 200, 500]
-
-    h5 = h5py.File("/Users/jameslamb/Documents/research/data/CoNi90/CoNi90.dream3d", 'r')
-    ids = h5["DataContainers/ImageDataContainer/CellData/FeatureIds"][..., 0]
-    h5.close()
-
-    c = np.array(ids.shape) // 2
-    ids_sized = []
-    for i in range(len(sizes)):
-        x = slice(max(0, c[0]-sizes[i]//2), min(ids.shape[0], c[0]+sizes[i]//2))
-        y = slice(max(0, c[1]-sizes[i]//2), min(ids.shape[1], c[1]+sizes[i]//2))
-        z = slice(max(0, c[2]-sizes[i]//2), min(ids.shape[2], c[2]+sizes[i]//2))
-        ids_sized.append(ids[x, y, z])
-
-    usage = []
-    times = []
-    for i in range(len(ids_sized)):
-        print(f"Running test for shape {ids_sized[i].shape}")
-        elapsed = []
-        used = []
-        for _ in range(iterations):
-            t0 = time.time()
-            mem_usage = memory_profiler.memory_usage((main, (ids_sized[i],)), interval=interval)
-            t1 = time.time()
-            elapsed.append(t1 - t0)
-            used.append(max(mem_usage))
-        times.append((np.mean(elapsed), np.std(elapsed)))
-        usage.append((np.mean(used), np.std(used)))
-    
-    num_elements = [np.prod(s.shape) for s in ids_sized]
-    tm = [t[0] for t in times]
-    um = [u[0] for u in usage]
-    ts = [t[1] for t in times]
-    us = [u[1] for u in usage]
-
-    fig, ax = plt.subplots(1, 2, figsize=(12, 6))
-    ax[0].errorbar(num_elements, tm, yerr=ts, fmt='o-')
-    ax[0].set_ylabel("Time (s)")
-    ax[0].set_xscale('log')
-    ax[0].set_yscale('log')
-    ax[0].set_title("Time vs. number of elements")
-    ax[0].grid()
-
-    ax[1].errorbar(num_elements, um, yerr=us, fmt='o-', label="Memory usage")
-    ax[1].set_ylim(10, max(um) * 1.1)
-    ax[1].set_xlabel("Number of elements")
-    ax[1].set_ylabel("Memory usage (MB)")
-    ax[1].set_xscale('log')
-    ax[1].set_yscale('log')
-    ax[1].set_title("Memory usage vs. number of elements")
-    ax[1].legend()
-    ax[1].grid()
-
-    plt.tight_layout()
-    plt.show()
-        
+with open("E:/rolled_al/osm_values.txt", "r") as f:
+    osm = f.read()
+osm = np.array(osm.replace(" "*6, " ").replace(" "*5, " ").strip().replace("\n", "").split(" "), dtype=float).reshape(687, 725)
 
 
+# ut.view_simple(osm, 'RdBu', "E:/rolled_Al/results/osm_trancated.tif")
+# ut.view(osm, "OSM", 'RdBu')
+# vmin, vmax = np.percentile(dd_l1_new, [0.5, 99.5])
+# ut.view_simple(dd_l1_new, "RdBu_r", "E:/rolled_Al/results/l1_truncated.tif", vmin=vmin, vmax=vmax)
+# ut.view(dd_l1_new, r"L1 minimization, $\rho^{GND}$ $[m^{-2}]$", 'RdBu_r', log=True, vmin=vmin, vmax=vmax)
+# vmin, vmax = np.percentile(dd_l2_new, [0.5, 99.5])
+# ut.view_simple(dd_l2_new, "RdBu_r", "E:/rolled_Al/results/l2_truncated.tif", vmin=vmin, vmax=vmax)
+# ut.view(dd_l2_new, r"L2 minimization, $\rho^{GND}$ $[m^{-2}]$", 'RdBu_r', log=True, vmin=vmin, vmax=vmax)
+
+
+# ut.view(misori, "Misorientation $[^\circ]$", 'jet', vmin=0, vmax=4)
+# ut.view(dd_l1_new, r"L1 minimization, $\rho^{GND}$ $[m^{-2}]$", 'RdBu_r', log=True, vmin=11.5, vmax=15)
+# ut.view(dd_l2_new, r"L2 minimization, $\rho^{GND}$ $[m^{-2}]$", 'RdBu_r', log=True, vmin=11.5, vmax=15)
+# ut.view(ids[0], "Feature ID", 'cividis')
+# ut.view_simple(misori, 'Greys', "E:/rolled_al/Finite-Difference-Misorientation.tif", vmin=0, vmax=4)
+# ut.view_simple(dd_l1_new, 'Greys', "E:/rolled_al/L1-GND-Density.tif", vmin=11.5, vmax=15)
+# ut.view_simple(dd_l2_new, 'Greys', "E:/rolled_al/L2-GND-Density.tif", vmin=11.5, vmax=15)
+
+range = ((osm.min(), osm.max()),
+         (dd_l1_new[dd_l1_new > 0].min(), dd_l1_new.max()))
+extent = range[0] + range[1]
+
+# plot the GND density vs OSM as a scatter plot
+# on the x axis, also show the histogram of the OSM
+# on the y axis, also show the histogram of the GND density
+
+# fig, ax = plt.subplots(1, 1, figsize=(9, 8))
+# ax.tick_params(axis='both', which='major', labelsize=16)
+# h, edges = np.histogram(dd_l1_new.flatten(), bins=200, range=range[1], density=True)
+# ax.plot(edges[:-1], h, color=(0.9, 0.2, 0.2, 1.0))
+# ax.set_xlim(range[1])
+# ax.set_xlabel(r"L1 minimization, $\rho^{GND}$ $[m^{-2}]$", color=(0.9, 0.2, 0.2, 1.0), fontsize=20, labelpad=10)
+# ax.set_ylabel("Density", fontsize=20, labelpad=10)
+# ax.tick_params(axis='x', labelcolor=(0.9, 0.2, 0.2, 1.0), labelsize=16)
+# ut.make_axis_log(ax, 'x')
+# axt = ax.twiny()
+# h, edges = np.histogram(osm.flatten(), bins=200, range=range[0], density=True)
+# edges = edges[:-1]
+# mask = h > 1e-2
+# mask[:50] = h[:50] > 1e-3
+# mask[-10:] = True
+# axt.plot(edges[mask], h[mask], color=(0.2, 0.2, 0.9, 1.0))
+# axt.set_xlim(range[0])
+# axt.set_xlabel("OSM", color=(0.2, 0.2, 0.9, 1.0), fontsize=20, labelpad=10)
+# axt.tick_params(axis='x', labelcolor=(0.2, 0.2, 0.9, 1.0), labelsize=16)
+# plt.tight_layout()
+# plt.show()
+
+mask = dd_l1_new > 0
+fig, ax = plt.subplots(1, 1, figsize=(9, 7.5))
+# _, _, _, im = ax.hist2d(osm[mask], dd_l1_new[mask], bins=40, range=range, cmap='Blues_r', density=True)
+ax.scatter(osm[mask], dd_l1_new[mask], s=1.0, c='blue', alpha=0.2, marker="s")
+ut.make_axis_log(ax, 'y')
+ut.standardize_axis(ax)
+ax.set_xlabel("OSM", fontsize=20, labelpad=10)
+ax.set_ylabel(r"L1 minimization, $\rho^{GND}$ $[m^{-2}]$", fontsize=20, labelpad=10)
+ax.tick_params(axis='both', which='major', labelsize=16)
+plt.tight_layout()
+plt.subplots_adjust(left=0.15, right=0.82, top=0.98, bottom=0.1)
+# l = ax.get_position()
+# cax = fig.add_axes([l.x1 + 0.04, l.y0, 0.02, l.height])
+# fig.colorbar(im, cax=cax)
+# cax.set_ylabel("Density", fontsize=20, labelpad=10)
+# cax.tick_params(axis='both', which='major', labelsize=14)
+plt.show()

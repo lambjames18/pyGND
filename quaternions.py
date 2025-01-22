@@ -21,6 +21,8 @@ https://github.com/facebookresearch/pynp3d
 """
 
 import numpy as np
+from tqdm import tqdm
+import rotations
 from rotations import epsijk
 
 
@@ -133,7 +135,7 @@ def qu_prod_pos_real(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     aw, ax, ay, az = a[..., 0], a[..., 1], a[..., 2], a[..., 3]
     bw, bx, by, bz = b[..., 0], b[..., 1], b[..., 2], b[..., 3]
     ow = aw * bw - ax * bx - ay * by - az * bz
-    return ow.abs()
+    return np.abs(ow)
 
 
 def qu_triple_prod_pos_real(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> np.ndarray:
@@ -283,7 +285,8 @@ def qu_angle(qu: np.ndarray) -> np.ndarray:
     Returns:
         array of shape (..., ) of rotation angles.
     """
-    return 2 * np.acos(qu[..., 0])
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return 2 * np.arccos(qu[..., 0])
 
 
 def qu_axis(qu: np.ndarray) -> np.ndarray:
@@ -296,7 +299,8 @@ def qu_axis(qu: np.ndarray) -> np.ndarray:
     Returns:
         array of shape (..., 3) of rotation axes.
     """
-    return qu[..., 1:] / np.linalg.norm(qu[..., 1:], axis=-1, keepdims=True)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return qu[..., 1:] / np.linalg.norm(qu[..., 1:], axis=-1, keepdims=True)
 
 
 def qu_avg(q: np.ndarray, laue_id) -> np.ndarray:
@@ -356,12 +360,19 @@ def qu_disorientation(
     """
 
     # get the important shapes
-    data_shape = quats1.shape
+    data_shape = quats2.shape
 
     # check that the shapes are the same
-    if data_shape != quats2.shape:
+    if data_shape == (4,):
+        data_shape = (1, 4)
+        quats1 = quats1.reshape(data_shape)
+    elif data_shape == (1, 4):
+        pass
+    elif data_shape == quats2.shape:
+        pass
+    else:
         raise ValueError(
-            f"quats1 and quats2 must have the same data shape, but got {data_shape} and {quats2.shape}"
+            f"quats1 and quats2 must have the same data shape, or quats1 must be a single quaternion, but got {data_shape} and {quats2.shape}"
         )
 
     # multiply by inverse of second (without symmetry)
@@ -372,38 +383,161 @@ def qu_disorientation(
 
     # retrieve the laue group elements for the first quaternions
     laue_group_1 = laue_elements(laue_id_1)
+    laue_group_1 = np.vstack((laue_group_1, qu_conj(laue_group_1)))
 
     # if the laue groups are the same, then the second laue group is the same as the first
     if laue_id_1 == laue_id_2:
         laue_group_2 = laue_group_1
     else:
         laue_group_2 = laue_elements(laue_id_2)
+        laue_group_2 = np.vstack((laue_group_2, qu_conj(laue_group_2)))
 
     # pre / post mult by Laue operators of the second and first symmetry groups respectively
     # broadcasting is done so that the output is of shape (N, |laue_group_2|, |laue_group_1|, 4)
-    equivalent_quaternions = qu_prod(
+    equivalent_quaternions = qu_prod_raw(
         laue_group_2.reshape(1, -1, 1, 4),
-        qu_prod(misori_quats.reshape(N, 1, 1, 4), laue_group_1.reshape(1, 1, -1, 4)),
+        qu_prod_raw(misori_quats.reshape(N, 1, 1, 4), laue_group_1.reshape(1, 1, -1, 4)),
     )
 
     # flatten along the laue group dimensions
     equivalent_quaternions = equivalent_quaternions.reshape(N, -1, 4)
+    equivalent_quaternions = np.unique(equivalent_quaternions, axis=1)
 
     # find the quaternion with the largest real part value (smallest angle)
     row_maximum_indices = np.argmax(
         np.abs(equivalent_quaternions[..., 0]),
         axis=-1,
     )
-
     # TODO - Multiple equivalent quaternions can have the same angle. This function
     # should choose the one with an axis that is in the fundamental sector of the sphere
     # under the symmetry given by the intersection of the two Laue groups.
 
     # gather the equivalent quaternions with the largest w value for each equivalent quaternion set
-    output = equivalent_quaternions[np.arange(N), row_maximum_indices]
+    # output = equivalent_quaternions[np.arange(N), row_maximum_indices]
+    output = np.zeros((N, 4), dtype=quats1.dtype)
+    abs_scalars = np.abs(equivalent_quaternions[..., 0])
+    for i in tqdm(range(N)):
+    # for i in range(N):
+        # print("Number of equivalent quaternions", equivalent_quaternions[i].shape[0])
+        mask = np.isclose(abs_scalars[i], abs_scalars[i, row_maximum_indices[i]], rtol=1e-6, atol=1e-6)
+        out_equivalent = qu_norm_std(equivalent_quaternions[i][mask]) + 0.0
+        if [1.0, 0.0, 0.0, 0.0] in out_equivalent.tolist():
+            output[i] = [1.0, 0.0, 0.0, 0.0]
+            continue
+        angles = qu_angle(out_equivalent)
+        axes = qu_axis(out_equivalent)
+        angles[axes[..., 2] < 0] *= -1
+        axes[axes[..., 2] < 0] *= -1
+        mask1 = (axes[..., 0] >= 0) & (axes[..., 1] >= 0) & (axes[..., 2] >= 0)  # all positive
+        mask2 = (axes[..., 2] >= axes[..., 1]) & (axes[..., 1] >= axes[..., 0])  # ascending order
+        mask3 = mask1 & mask2
+        if mask3.sum() == 0:
+            print(out_equivalent)
+            print("Number of minimum angle quaternions", out_equivalent.shape[0])
+            print(axes)
+            print("mask1", mask1.sum())
+            print("mask2", mask2.sum())
+            print("mask all", mask3.sum())
+            print(equivalent_quaternions[i][mask][mask3])
+            print(out_equivalent[mask3])
+            print(axes[mask3])
+            print(angles[mask3])
+            raise ValueError("No equivalent quaternion found in the fundamental sector")
+        output[i] = out_equivalent[mask3][0]
+        
 
     return qu_norm_std(output.reshape(data_shape))
 
+
+def qu_disorientation_directional(
+    quats1: np.ndarray, quats2: np.ndarray, laue_id: int
+):
+    """
+
+    Return the disorientation quaternion between the given quaternions.
+
+    Args:
+        quats1: quaternions of shape (..., 4)
+        quats2: quaternions of shape (..., 4)
+        laue_id: laue group ID of quats
+
+    Returns:
+        disorientation quaternion of shape (..., 4)
+
+    """
+
+    # get the important shapes
+    data_shape = quats1.shape
+
+    # check that the shapes are the same
+    if data_shape == (4,):
+        data_shape = (1, 4)
+        quats1 = quats1.reshape(data_shape)
+    elif data_shape == (1, 4):
+        pass
+    elif data_shape == quats2.shape:
+        pass
+    else:
+        raise ValueError(
+            f"quats1 and quats2 must have the same data shape, or quats1 must be a single quaternion, but got {data_shape} and {quats2.shape}"
+        )
+
+    # Get disorientation quaternions
+    disori_quats = qu_disorientation(quats1, quats2, laue_id, laue_id)
+
+    angles = qu_angle(disori_quats)
+    axes = qu_axis(disori_quats)
+    angles[axes[..., 2] < 0] *= -1
+
+    return angles
+
+
+def ori_to_fz_laue(quats: np.ndarray, laue_id: int) -> np.ndarray:
+    """
+    This function moves the given quaternions to the fundamental zone of the
+    given Laue group. This computes the orientation fundamental zone, not the
+    misorientation fundamental zone.
+
+    Args:
+        quats: quaternions to move to fundamental zone of shape (..., 4)
+        laue_id: laue group of quaternions to move to fundamental zone
+
+    Returns:
+        orientations in fundamental zone of shape (..., 4)
+
+    Notes:
+
+    1) Laue C1       Triclinic: 1-, 1
+    2) Laue C2      Monoclinic: 2/m, m, 2
+    3) Laue D2    Orthorhombic: mmm, mm2, 222
+    4) Laue C4  Tetragonal low: 4/m, 4-, 4
+    5) Laue D4 Tetragonal high: 4/mmm, 4-2m, 4mm, 422
+    6) Laue C3    Trigonal low: 3-, 3
+    7) Laue D3   Trigonal high: 3-m, 3m, 32
+    8) Laue C6   Hexagonal low: 6/m, 6-, 6
+    9) Laue D6  Hexagonal high: 6/mmm, 6-m2, 6mm, 622
+    10) Laue T       Cubic low: m3-, 23
+    11) Laue O      Cubic high: m3-m, 4-3m, 432
+
+    """
+    # get the important shapes
+    data_shape = quats.shape
+    N = np.prod(np.array(data_shape[:-1]))
+    laue_group = laue_elements(laue_id)
+    card = laue_group.shape[0]
+
+    # reshape so that quaternions is (N, 1, 4) and laue_group is (1, card, 4) then use broadcasting
+    equivalent_quaternions_real = qu_prod_pos_real(
+        quats.reshape(N, 1, 4), laue_group.reshape(card, 4)
+    )
+
+    # find the quaternion with the largest w value
+    row_maximum_indices = np.argmax(equivalent_quaternions_real, axis=-1)
+
+    # gather the equivalent quaternions with the largest w value for each equivalent quaternion set
+    output = qu_prod(quats.reshape(N, 4), laue_group[row_maximum_indices])
+
+    return output.reshape(data_shape)
 
 
 def laue_elements(laue_id: int) -> np.ndarray:
@@ -440,6 +574,64 @@ def laue_elements(laue_id: int) -> np.ndarray:
     R3 = (3.0**0.5) / 2.0
 
     LAUE_O = np.array(
+        [
+            [1.0, 0.0, 0.0, 0.0],
+            [R2, 0.0, 0.0, R2],
+            [0.0, 0.0, 0.0, 1.0],
+            [-R2, 0.0, 0.0, R2], #
+            [0.5, 0.5, 0.5, 0.5],
+            [0.0, 0.0, R2, R2],
+            [-0.5, -0.5, 0.5, 0.5], #
+            [-R2, -R2, 0.0, 0.0],  #
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, R2, R2, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, -R2, R2, 0.0],
+            [-0.5, 0.5, 0.5, -0.5], #
+            [0.0, 0.0, R2, -R2], #
+            [0.5, -0.5, 0.5, -0.5],
+            [R2, -R2, 0.0, 0.0],
+            [0.0, R2, 0.0, R2],
+            [-0.5, 0.5, 0.5, 0.5], #
+            [-R2, 0.0, R2, 0.0], #
+            [-0.5, -0.5, 0.5, -0.5], #
+            [0.0, R2, 0.0, -R2], #
+            [0.5, 0.5, 0.5, -0.5],
+            [R2, 0.0, R2, 0.0],
+            [0.5, -0.5, 0.5, 0.5],
+        ],
+        dtype=np.float64,
+    )
+    LAUE_O_alt = np.array(
+        [
+            [1.0, 0.0, 0.0, 0.0],
+            [R2, 0.0, 0.0, R2],
+            [0.0, 0.0, 0.0, 1.0],
+            [R2, 0.0, 0.0, -R2], #
+            [0.5, 0.5, 0.5, 0.5],
+            [0.0, 0.0, R2, R2],
+            [0.5, 0.5, -0.5, -0.5], #
+            [R2, R2, 0.0, 0.0],  #
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, R2, R2, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, -R2, R2, 0.0],
+            [0.5, -0.5, -0.5, 0.5], #
+            [0.0, 0.0, -R2, R2], #
+            [0.5, -0.5, 0.5, -0.5],
+            [R2, -R2, 0.0, 0.0],
+            [0.0, R2, 0.0, R2],
+            [0.5, -0.5, -0.5, -0.5], #
+            [R2, 0.0, -R2, 0.0], #
+            [0.5, 0.5, -0.5, 0.5], #
+            [0.0, -R2, 0.0, R2], #
+            [0.5, 0.5, 0.5, -0.5],
+            [R2, 0.0, R2, 0.0],
+            [0.5, -0.5, 0.5, 0.5],
+        ],
+        dtype=np.float64,
+    )
+    LAUE_O_ = np.array(
         [
             [1.0, 0.0, 0.0, 0.0],
             [R2, R2, 0.0, 0.0],
@@ -606,22 +798,39 @@ def laue_elements(laue_id: int) -> np.ndarray:
 if __name__ == "__main__":
     np.set_printoptions(precision=7, suppress=True, linewidth=200)
     import rotations
-    eu1 = np.array([139.54673579, 6.21773799, 206.61087276])
-    eu2 = np.array([139.95238991, 6.32373518, 206.02301806])
-    qu1 = rotations.eu2qu(np.deg2rad(eu1))
-    qu2 = rotations.eu2qu(np.deg2rad(eu2))
-    qu1_s = qu_prod(laue_elements(11), qu1)
-    qu2_s = qu_prod(laue_elements(11), qu2)
+    from orix.quaternion import OrientationRegion, Orientation, Misorientation, symmetry
+    
+    theta = 10.0
+    axis = np.array([1.1, 0.9, 0.2])
 
-    print(qu_log(qu1_s).shape)
-    exit()
+    axis = axis / np.linalg.norm(axis)
+    q0 = np.array([1, 0, 0, 0])
+    q1 = np.array([np.cos(np.deg2rad(theta / 2)), *np.sin(np.deg2rad(theta / 2)) * axis])
+    q2 = np.array([np.cos(np.deg2rad(theta / 2)), *np.sin(np.deg2rad(theta / 2)) * -axis])
+    qs = np.vstack([q0, q1, q2])
 
-    dis = qu_disorientation(qu1, qu2)
-    angle = qu_angle(dis)
-    axis = qu_axis(dis)
-    print("Disorientation quaternion:")
-    print(dis, "\n")
-    print("Disorientation axis:")
-    print(axis, "\n")
-    print("Disorientation angle:")
-    print(np.rad2deg(angle), "\n")
+    print("q0", q0)
+    print("q1", q1)
+    print("q2", q2)
+
+    o0 =  Orientation(q0, symmetry=symmetry.Oh)
+    o1 =  Orientation(q1, symmetry=symmetry.Oh)
+    o2 =  Orientation(q2, symmetry=symmetry.Oh)
+    m01 = Misorientation(o0 * o1.conj, symmetry=(symmetry.Oh, symmetry.Oh))
+    m02 = Misorientation(o0 * o2.conj, symmetry=(symmetry.Oh, symmetry.Oh))
+    m01_fz = m01.map_into_symmetry_reduced_zone()
+    m02_fz = m02.map_into_symmetry_reduced_zone()
+    
+    print("q0 * q1")
+    print("orix", m01.data[0])
+    print("orix fz", m01_fz.data[0])
+    print("custom", qu_disorientation(q0, q1, 11, 11))
+
+    print("")
+
+    print("q0 * q2")
+    print("orix", m02.data[0])
+    print("orix fz", m02_fz.data[0])
+    print("custom", qu_disorientation(q0, q2, 11, 11))
+
+    # print(m01.equivalent())
