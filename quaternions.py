@@ -374,6 +374,10 @@ def qu_disorientation(
         raise ValueError(
             f"quats1 and quats2 must have the same data shape, or quats1 must be a single quaternion, but got {data_shape} and {quats2.shape}"
         )
+    if not ((quats1.dtype == np.float64) or (quats1.dtype == np.float32)):
+        raise ValueError("Quaternions must be of type float32 or float64")
+    if not ((quats2.dtype == np.float64) or (quats2.dtype == np.float32)):
+        raise ValueError("Quaternions must be of type float32 or float64")
 
     # multiply by inverse of second (without symmetry)
     misori_quats = qu_prod(quats1, qu_conj(quats2))
@@ -383,14 +387,14 @@ def qu_disorientation(
 
     # retrieve the laue group elements for the first quaternions
     laue_group_1 = laue_elements(laue_id_1)
-    laue_group_1 = np.vstack((laue_group_1, qu_conj(laue_group_1)))
+    # laue_group_1 = np.vstack((laue_group_1, qu_conj(laue_group_1)))
 
     # if the laue groups are the same, then the second laue group is the same as the first
     if laue_id_1 == laue_id_2:
         laue_group_2 = laue_group_1
     else:
         laue_group_2 = laue_elements(laue_id_2)
-        laue_group_2 = np.vstack((laue_group_2, qu_conj(laue_group_2)))
+        # laue_group_2 = np.vstack((laue_group_2, qu_conj(laue_group_2)))
 
     # pre / post mult by Laue operators of the second and first symmetry groups respectively
     # broadcasting is done so that the output is of shape (N, |laue_group_2|, |laue_group_1|, 4)
@@ -416,12 +420,11 @@ def qu_disorientation(
     # output = equivalent_quaternions[np.arange(N), row_maximum_indices]
     output = np.zeros((N, 4), dtype=quats1.dtype)
     abs_scalars = np.abs(equivalent_quaternions[..., 0])
-    for i in tqdm(range(N)):
-    # for i in range(N):
-        # print("Number of equivalent quaternions", equivalent_quaternions[i].shape[0])
+    for i in range(N):
         mask = np.isclose(abs_scalars[i], abs_scalars[i, row_maximum_indices[i]], rtol=1e-6, atol=1e-6)
         out_equivalent = qu_norm_std(equivalent_quaternions[i][mask]) + 0.0
         if [1.0, 0.0, 0.0, 0.0] in out_equivalent.tolist():
+            print("Found identity quaternion")
             output[i] = [1.0, 0.0, 0.0, 0.0]
             continue
         angles = qu_angle(out_equivalent)
@@ -444,7 +447,6 @@ def qu_disorientation(
             print(angles[mask3])
             raise ValueError("No equivalent quaternion found in the fundamental sector")
         output[i] = out_equivalent[mask3][0]
-        
 
     return qu_norm_std(output.reshape(data_shape))
 
@@ -804,9 +806,9 @@ if __name__ == "__main__":
     axis = np.array([1.1, 0.9, 0.2])
 
     axis = axis / np.linalg.norm(axis)
-    q0 = np.array([1, 0, 0, 0])
-    q1 = np.array([np.cos(np.deg2rad(theta / 2)), *np.sin(np.deg2rad(theta / 2)) * axis])
-    q2 = np.array([np.cos(np.deg2rad(theta / 2)), *np.sin(np.deg2rad(theta / 2)) * -axis])
+    q0 = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
+    q1 = np.array([np.cos(np.deg2rad(theta / 2)), *np.sin(np.deg2rad(theta / 2)) * axis], dtype=np.float32)
+    q2 = np.array([np.cos(np.deg2rad(theta / 2)), *np.sin(np.deg2rad(theta / 2)) * -axis], dtype=np.float32)
     qs = np.vstack([q0, q1, q2])
 
     print("q0", q0)
