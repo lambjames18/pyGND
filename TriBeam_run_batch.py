@@ -33,10 +33,11 @@ if __name__ == "__main__":
         2.48e-10,  # CoNi_67
         2.48e-10,  # CoNi_16
     ]
-    n_cpus = 3
+    n_cpus = 15
     cs = 1
     minimization = "l2"
     progress_bar = True
+    chunk_size = 50
 
     for i in range(len(paths)):
         path = paths[i]
@@ -64,19 +65,21 @@ if __name__ == "__main__":
             euler,
             ids,
             cs,
-            burgers,
+            burger,
             spacing,
             minimization=minimization,
             n_cpus=n_cpus,
             progress_bar=progress_bar,
+            chunk_size=chunk_size,
         )
+        dd = dd[minimization]
         np.save(path.replace(".dream3d", "_GND.npy"), dd)
         np.save(path.replace(".dream3d", "_MIS.npy"), mis)
         print("Time:", time.time() - t0)
 
         h5 = h5py.File(path, "r+")
-        h5["DataStructure/ImageDataContainer/CellData/GND"][...] = dd.sum(
-            axis=0
-        ).reshape(ids.shape + (1,))
+        h5["DataStructure/ImageDataContainer/CellData/GND"][...] = (
+            dd[minimization].sum(axis=0).reshape(ids.shape + (1,))
+        )
         h5.close()
         print("*" * 50)
