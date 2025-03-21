@@ -1,3 +1,6 @@
+import contextlib
+import joblib
+
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import numpy as np
@@ -29,8 +32,10 @@ def read_ang(path, ids_path=None):
     if raw_data.shape[0] == ncols * nrows:
         data = raw_data.reshape((nrows, ncols, n_entries))
     elif raw_data.shape != ncols * nrows:
-        raise ValueError(f"The number of data points ({raw_data.size}) does not match the expected grid ({nrows} rows, {ncols} cols, {ncols * nrows} total points). ")
-        
+        raise ValueError(
+            f"The number of data points ({raw_data.size}) does not match the expected grid ({nrows} rows, {ncols} cols, {ncols * nrows} total points). "
+        )
+
     out = {col_names[i]: data[:, :, i] for i in range(n_entries)}
     eulerangles = np.array([out["phi1"], out["PHI"], out["phi2"]]).T.astype(float)
     eulerangles = eulerangles.reshape(1, *eulerangles.shape).transpose(0, 2, 1, 3)
@@ -43,22 +48,26 @@ def read_ang(path, ids_path=None):
 
 
 def read_dream3d(
-        path: str, 
-        ids_path: str = "DataContainers/ImageDataContainer/CellData/FeatureIds",
-        euler_path: str = "DataContainers/ImageDataContainer/CellData/EulerAngles",
-    ) -> tuple:
+    path: str,
+    ids_path: str = "DataContainers/ImageDataContainer/CellData/FeatureIds",
+    euler_path: str = "DataContainers/ImageDataContainer/CellData/EulerAngles",
+) -> tuple:
     """Reads a dream3d file into a numpy array"""
 
     h5 = h5py.File(path, "r")
     try:
         ids = h5[ids_path][..., 0]
     except KeyError:
-        raise KeyError(f"Could not find the FeatureIds array at the path {ids_path} wihtin the dream3d file.")
+        raise KeyError(
+            f"Could not find the FeatureIds array at the path {ids_path} wihtin the dream3d file."
+        )
 
     try:
         eulerangles = h5[euler_path][...]
     except KeyError:
-        raise KeyError(f"Could not find the EulerAngles array at the path {euler_path} wihtin the dream3d file.")
+        raise KeyError(
+            f"Could not find the EulerAngles array at the path {euler_path} wihtin the dream3d file."
+        )
 
     return eulerangles, ids
 
@@ -96,7 +105,7 @@ def make_axis_log(ax, axis="x"):
         ax.xaxis.set_ticks(tick_range)
         minor_ticks = []
         for p in tick_range_minor:
-            for x in np.linspace(10 ** p, 10 ** (p + 1), 10):
+            for x in np.linspace(10**p, 10 ** (p + 1), 10):
                 if np.log10(x) >= xmin and np.log10(x) <= xmax:
                     minor_ticks.append(np.log10(x))
         ax.xaxis.set_ticks(minor_ticks, minor=True)
@@ -108,7 +117,7 @@ def make_axis_log(ax, axis="x"):
         ax.yaxis.set_ticks(tick_range)
         minor_ticks = []
         for p in tick_range_minor:
-            for y in np.linspace(10 ** p, 10 ** (p + 1), 10):
+            for y in np.linspace(10**p, 10 ** (p + 1), 10):
                 if np.log10(y) >= ymin and np.log10(y) <= ymax:
                     minor_ticks.append(np.log10(y))
         ax.yaxis.set_ticks(minor_ticks, minor=True)
@@ -121,7 +130,7 @@ def view(arr, title, cmap, vmin=None, vmax=None, log=False):
         vmax = np.nanmax(arr)
     fig, ax = plt.subplots(1, 1, figsize=(3.9, 3), dpi=300)
     im = ax.imshow(arr, cmap=cmap, vmin=vmin, vmax=vmax)
-    ax.axis('off')
+    ax.axis("off")
     plt.tight_layout()
     plt.subplots_adjust(left=0.02, right=0.78, top=0.98, bottom=0.02)
     l = ax.get_position()
@@ -140,9 +149,28 @@ def view_simple(arr, cmap, save_path=None, vmin=None, vmax=None):
     size = (arr.shape[1] / 300, arr.shape[0] / 300)
     fig, ax = plt.subplots(1, 1, figsize=size, dpi=300)
     ax.imshow(arr, cmap=cmap, vmin=vmin, vmax=vmax)
-    ax.axis('off')
+    ax.axis("off")
     plt.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.0)
     if save_path is not None:
         plt.savefig(save_path)
     else:
         plt.show()
+
+
+# Context manager to patch joblib to report into tqdm progress bar given as argument
+@contextlib.contextmanager
+def tqdm_joblib(tqdm_object):
+    """Context manager to patch joblib to report into tqdm progress bar given as argument"""
+
+    class TqdmBatchCompletionCallback(joblib.parallel.BatchCompletionCallBack):
+        def __call__(self, *args, **kwargs):
+            tqdm_object.update(n=self.batch_size)
+            return super().__call__(*args, **kwargs)
+
+    old_batch_callback = joblib.parallel.BatchCompletionCallBack
+    joblib.parallel.BatchCompletionCallBack = TqdmBatchCompletionCallback
+    try:
+        yield tqdm_object
+    finally:
+        joblib.parallel.BatchCompletionCallBack = old_batch_callback
+        tqdm_object.close()
