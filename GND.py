@@ -464,12 +464,15 @@ def get_orientation_gradients(
     out_shape = quats.shape[:-1]
 
     # Reshape the data to be 1D
+    t0 = time.time()
     quats = quats.reshape(-1, 4)
     pts0 = pts0.reshape(-1, 3, 3)
     pts1 = pts1.reshape(-1, 3, 3)
     distances = distances.reshape(-1, 3)
 
     # Convert points to raveled indices
+
+    t0 = time.time()
     pts0 = np.stack(
         [
             np.ravel_multi_index(pts0[:, 0].T, out_shape),
@@ -488,6 +491,7 @@ def get_orientation_gradients(
     )
 
     # Get quaternion pairs
+    t0 = time.time()
     q0 = np.stack(
         [quats[pts0[:, 0]], quats[pts0[:, 1]], quats[pts0[:, 2]]], axis=1
     )  # (n_pairs, 3, 4)
@@ -813,16 +817,17 @@ if __name__ == "__main__":
 
     cs = 1
     minimization = "l2"
-    n_cpus = 1
-    progress_bar = False
+    n_cpus = 3
+    progress_bar = True
+    chunk_size = 10
 
     if which == "2D":
         path = "/Users/jameslamb/Documents/research/data/Marc_rolled-Al-EBSD/merged_1x1.ang"
         ids_path = "E:/rolled_Al/FeatureIDs.npy"
         burgers = 2.86e-10
         euler, ids, spacing = utils.read_ang(path)  # , ids_path)
-        euler = euler[:, :100, :100]
-        ids = ids[:, :100, :100]
+        # euler = euler[:, :100, :100]
+        # ids = ids[:, :100, :100]
 
     elif which == "3D":
         path = "D:/Research/CoNi_90/Data/3D/CoNi90.dream3d"
@@ -845,7 +850,14 @@ if __name__ == "__main__":
     print("Done getting finite difference coordinates")
 
     dphi, mis = get_orientation_gradients(
-        quats, nbrs0, nbrs1, distances, cs, n_cpus, progress_bar=progress_bar
+        quats,
+        nbrs0,
+        nbrs1,
+        distances,
+        cs,
+        n_cpus,
+        progress_bar=progress_bar,
+        chunk_size=chunk_size,
     )
     print("Done getting orientation gradients")
 
