@@ -515,7 +515,7 @@ def get_orientation_gradients(
 
         # Run the calculations in parallel
         if progress_bar:
-            with tqdm_joblib(tqdm(total=N, desc="Patterns optimized")) as progress_bar:
+            with tqdm_joblib(tqdm(total=N, desc="Processing")) as progress_bar:
                 quats_disorientation = Parallel(n_jobs=n_cpus)(
                     delayed(quaternions.qu_disorientation)(q0, q1, laue_id, laue_id)
                     for q0, q1 in chunks
