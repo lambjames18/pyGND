@@ -72,6 +72,23 @@ def read_dream3d(
     return eulerangles, ids
 
 
+def read_dream3d_spacing(
+    path: str, spacing_path: str, dream3d_nx: bool = False
+) -> np.ndarray:
+    """Read the spacing from a dream3d file."""
+    h5 = h5py.File(path, "r")
+    try:
+        if dream3d_nx:
+            spacing = h5[spacing_path].attrs["_SPACING"][...]
+        else:
+            spacing = h5[spacing_path][...]
+    except KeyError:
+        raise KeyError(
+            f"Could not find the spacing array at the path {spacing_path} wihtin the dream3d file."
+        )
+    return spacing
+
+
 def standardize_axis(ax, grid=True, **kwargs):
     kwargs["labelsize"] = kwargs.get("labelsize", 20)
     kwargs["labelcolor"] = kwargs.get("labelcolor", "k")
