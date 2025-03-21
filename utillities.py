@@ -42,32 +42,25 @@ def read_ang(path, ids_path=None):
     return eulerangles, ids, spacing
 
 
-def read_dream3d(path: str, ids_path: str = None, euler_path: str = None, res_path: str = None):
+def read_dream3d(
+        path: str, 
+        ids_path: str = "DataContainers/ImageDataContainer/CellData/FeatureIds",
+        euler_path: str = "DataContainers/ImageDataContainer/CellData/EulerAngles",
+    ) -> tuple:
     """Reads a dream3d file into a numpy array"""
-    if ids_path is None:
-        ids_path = "DataContainers/ImageDataContainer/CellData/FeatureIds"
-    if euler_path is None:
-        euler_path = "DataContainers/ImageDataContainer/CellData/EulerAngles"
-    if res_path is None:
-        res_path = "DataContainers/ImageDataContainer/_SIMPL_GEOMETRY/SPACING"
 
     h5 = h5py.File(path, "r")
     try:
-        ids = np.squeeze(h5[ids_path][...])
+        ids = h5[ids_path][..., 0]
     except KeyError:
         raise KeyError(f"Could not find the FeatureIds array at the path {ids_path} wihtin the dream3d file.")
 
     try:
-        eulerangles = np.squeeze(h5[euler_path][...])
+        eulerangles = h5[euler_path][...]
     except KeyError:
         raise KeyError(f"Could not find the EulerAngles array at the path {euler_path} wihtin the dream3d file.")
 
-    try:
-        spacing = np.squeeze(h5[res_path][...])
-    except KeyError:
-        raise KeyError(f"Could not find the SPACING array at the path {res_path} wihtin the dream3d file.")
-
-    return eulerangles, ids, spacing
+    return eulerangles, ids
 
 
 def standardize_axis(ax, grid=True, **kwargs):

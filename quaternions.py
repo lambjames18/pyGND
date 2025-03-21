@@ -342,7 +342,7 @@ def qu_log(q: np.ndarray, tol=1e-6) -> np.ndarray:
 
 
 def qu_disorientation(
-    quats1: np.ndarray, quats2: np.ndarray, laue_id_1: int, laue_id_2: int
+    quats1: np.ndarray, quats2: np.ndarray, laue_id_1: int, laue_id_2: int, naive=True
 ):
     """
 
@@ -353,6 +353,7 @@ def qu_disorientation(
         quats2: quaternions of shape (..., 4)
         laue_id_1: laue group ID of quats1
         laue_id_2: laue group ID of quats2
+        naive: whether to use the naive method or the more accurate method
 
     Returns:
         disorientation quaternion of shape (..., 4)
@@ -412,41 +413,42 @@ def qu_disorientation(
         np.abs(equivalent_quaternions[..., 0]),
         axis=-1,
     )
-    # TODO - Multiple equivalent quaternions can have the same angle. This function
-    # should choose the one with an axis that is in the fundamental sector of the sphere
-    # under the symmetry given by the intersection of the two Laue groups.
 
-    # gather the equivalent quaternions with the largest w value for each equivalent quaternion set
-    # output = equivalent_quaternions[np.arange(N), row_maximum_indices]
-    output = np.zeros((N, 4), dtype=quats1.dtype)
-    abs_scalars = np.abs(equivalent_quaternions[..., 0])
-    for i in range(N):
-        mask = np.isclose(abs_scalars[i], abs_scalars[i, row_maximum_indices[i]], rtol=1e-6, atol=1e-6)
-        out_equivalent = qu_norm_std(equivalent_quaternions[i][mask]) + 0.0
-        if [1.0, 0.0, 0.0, 0.0] in out_equivalent.tolist():
-            print("Found identity quaternion")
-            output[i] = [1.0, 0.0, 0.0, 0.0]
-            continue
-        angles = qu_angle(out_equivalent)
-        axes = qu_axis(out_equivalent)
-        angles[axes[..., 2] < 0] *= -1
-        axes[axes[..., 2] < 0] *= -1
-        mask1 = (axes[..., 0] >= 0) & (axes[..., 1] >= 0) & (axes[..., 2] >= 0)  # all positive
-        mask2 = (axes[..., 2] >= axes[..., 1]) & (axes[..., 1] >= axes[..., 0])  # ascending order
-        mask3 = mask1 & mask2
-        if mask3.sum() == 0:
-            print(out_equivalent)
-            print("Number of minimum angle quaternions", out_equivalent.shape[0])
-            print(axes)
-            print("mask1", mask1.sum())
-            print("mask2", mask2.sum())
-            print("mask all", mask3.sum())
-            print(equivalent_quaternions[i][mask][mask3])
-            print(out_equivalent[mask3])
-            print(axes[mask3])
-            print(angles[mask3])
-            raise ValueError("No equivalent quaternion found in the fundamental sector")
-        output[i] = out_equivalent[mask3][0]
+    # if naive, just grab the first quaternion that has the largest real part value
+    if naive:
+        output = equivalent_quaternions[np.arange(N), row_maximum_indices]
+    
+    # if not naive, then we find the quaternion with the largest real part and with the axis in the fundamental sector
+    else:
+        output = np.zeros((N, 4), dtype=quats1.dtype)
+        abs_scalars = np.abs(equivalent_quaternions[..., 0])
+        for i in range(N):
+            mask = np.isclose(abs_scalars[i], abs_scalars[i, row_maximum_indices[i]], rtol=1e-6, atol=1e-6)
+            out_equivalent = qu_norm_std(equivalent_quaternions[i][mask]) + 0.0
+            if [1.0, 0.0, 0.0, 0.0] in out_equivalent.tolist():
+                print("Found identity quaternion")
+                output[i] = [1.0, 0.0, 0.0, 0.0]
+                continue
+            angles = qu_angle(out_equivalent)
+            axes = qu_axis(out_equivalent)
+            angles[axes[..., 2] < 0] *= -1
+            axes[axes[..., 2] < 0] *= -1
+            mask1 = (axes[..., 0] >= 0) & (axes[..., 1] >= 0) & (axes[..., 2] >= 0)  # all positive
+            mask2 = (axes[..., 2] >= axes[..., 1]) & (axes[..., 1] >= axes[..., 0])  # ascending order
+            mask3 = mask1 & mask2
+            if mask3.sum() == 0:
+                print(out_equivalent)
+                print("Number of minimum angle quaternions", out_equivalent.shape[0])
+                print(axes)
+                print("mask1", mask1.sum())
+                print("mask2", mask2.sum())
+                print("mask all", mask3.sum())
+                print(equivalent_quaternions[i][mask][mask3])
+                print(out_equivalent[mask3])
+                print(axes[mask3])
+                print(angles[mask3])
+                raise ValueError("No equivalent quaternion found in the fundamental sector")
+            output[i] = out_equivalent[mask3][0]
 
     return qu_norm_std(output.reshape(data_shape))
 
