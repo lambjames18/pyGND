@@ -538,7 +538,6 @@ def get_orientation_gradients(
 
     # Get the misorientations from the rotation vectors
     misorientation = np.linalg.norm(rot_vectors, axis=-1)
-    misorientation
 
     # Get the orientation gradients
     with np.errstate(divide="ignore", invalid="ignore"):
