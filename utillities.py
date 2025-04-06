@@ -140,7 +140,7 @@ def make_axis_log(ax, axis="x"):
         ax.yaxis.set_ticks(minor_ticks, minor=True)
 
 
-def view(arr, title, cmap, vmin=None, vmax=None, log=False):
+def view(arr, title, cmap, vmin=None, vmax=None, log=False, show=True, return_ax=True):
     if vmin is None:
         vmin = np.nanmin(arr)
     if vmax is None:
@@ -155,7 +155,10 @@ def view(arr, title, cmap, vmin=None, vmax=None, log=False):
     fig.colorbar(im, cax=cax, label=title)
     if log:
         make_axis_log(cax, "y")
-    plt.show()
+    if show:
+        plt.show()
+    if return_ax:
+        return fig, ax
 
 
 def view_simple(arr, cmap, save_path=None, vmin=None, vmax=None):
