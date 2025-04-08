@@ -1,4 +1,5 @@
 import os
+import time
 from typing import Tuple
 import numpy as np
 from scipy import optimize
@@ -464,15 +465,12 @@ def get_orientation_gradients(
     out_shape = quats.shape[:-1]
 
     # Reshape the data to be 1D
-    t0 = time.time()
     quats = quats.reshape(-1, 4)
     pts0 = pts0.reshape(-1, 3, 3)
     pts1 = pts1.reshape(-1, 3, 3)
     distances = distances.reshape(-1, 3)
 
     # Convert points to raveled indices
-
-    t0 = time.time()
     pts0 = np.stack(
         [
             np.ravel_multi_index(pts0[:, 0].T, out_shape),
@@ -519,7 +517,7 @@ def get_orientation_gradients(
 
         # Run the calculations in parallel
         if progress_bar:
-            with tqdm_joblib(tqdm(total=N, desc="Patterns optimized")) as progress_bar:
+            with tqdm_joblib(tqdm(total=N, desc="Processing")) as progress_bar:
                 quats_disorientation = Parallel(n_jobs=n_cpus)(
                     delayed(quaternions.qu_disorientation)(q0, q1, laue_id, laue_id)
                     for q0, q1 in chunks
@@ -540,7 +538,6 @@ def get_orientation_gradients(
 
     # Get the misorientations from the rotation vectors
     misorientation = np.linalg.norm(rot_vectors, axis=-1)
-    misorientation
 
     # Get the orientation gradients
     with np.errstate(divide="ignore", invalid="ignore"):
@@ -726,6 +723,7 @@ def calculate(
     minimization: Tuple[str, tuple] = "l2",
     n_cpus=-1,
     progress_bar=True,
+    chunk_size=None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Calculate the GND density for a 2D or 3D EBSD dataset.
 
@@ -786,7 +784,14 @@ def calculate(
 
     # Get the orientation gradients
     dphi, mis = get_orientation_gradients(
-        quats, nbrs0, nbrs1, distances, cs, n_cpus, progress_bar=progress_bar
+        quats,
+        nbrs0,
+        nbrs1,
+        distances,
+        cs,
+        n_cpus,
+        progress_bar=progress_bar,
+        chunk_size=chunk_size,
     )
     mis = np.rad2deg(mis)
     mis = mis.transpose(3, 0, 1, 2)  # (..., 3) -> (3, ...)
