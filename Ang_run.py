@@ -2,152 +2,41 @@
 # Author: James Lamb (GND calculations originally from Wyatt Witzen)
 # All parameters should be stated within the config.ini file
 
-import sys
 import os
 import numpy as np
-import mpire
-import configparser
-import argparse
 
-import utillities as ut
+import utillities as utils
 import py_functions as pf
 import GND
 
-parser = argparse.ArgumentParser(prog='GND Calculations',
-                                 description='Determine the spatial distribution of GND densities in EBSD datasets using crystallography and misorientation.',
-                                 epilog='Original GND calculations were developed by Wyatt Wytzen, the python adaptation was developed by James Lamb.')
-parser.add_argument("-c", "--config", required=True,  help="The .ini file containing the calculation configuration")
-parser.add_argument("--segment", action='store_true', help="Perform grain segmentation on the dataset. Otherwise, assume all points are of the same grain.")
-parser.add_argument("-t", "--test", action='store_true', help="Terminate the code prior to excecuting parallel computations. Useful for guaranteeing that the script is setup properly.")
-args = parser.parse_args()
 
-config = configparser.ConfigParser()
-config.read(args.config)
-path = config["PARAMS"]["ANG File"]
-directory = config["PARAMS"]["Save Folder"]
-ID = config["PARAMS"]["ID"]
-burgers = float(config["PARAMS"]["Burgers"])
-cs = config["PARAMS"]["Crystallography"].lower()
-slip_systems = config["PARAMS"]["Slip Systems"].lower()
-minimization = config["PARAMS"]["Minimization"].lower()
+if __name__ == "__main__":
+    path = (
+        "/Users/jameslamb/Documents/research/data/GaN-DED/raw/20240508_27238_flipX.ang"
+    )
+    ids_path = None
+    burgers = (3.189e10, 5.185e-10)
+    n_cpus = 5
+    cs = 1
+    minimization = "l2"
+    progress_bar = True
+    spacing = np.array([1.5, 1.5, 1.5]) * 1e-6
 
-if cs.lower() == 'fcc': cs = 1
-elif cs.lower() == 'bcc': cs = 2
-elif cs.lower() == 'hcp': cs = 3
-else: raise ValueError("The crystallography entry in the config file was not one of the following ['fcc', 'bcc', 'hcp'].")
+    euler, ids = utils.read_ang(
+        path,
+        ids_path,
+    )
+    dd, mis = GND.calculate(
+        euler, ids, cs, burgers, spacing, minimization, n_cpus, progress_bar
+    )
 
+    import h5py
 
-def main(path, segment=False):
-    # Read data
-    euler, featIDs, spacing = ut.read_ang(path, segment=segment)
-    spacing *= 1e-6
-    print("\tSpacing (m):", spacing)
-    print("\tTotal number of points:", featIDs.size)
-    print("\tDataset shape:", featIDs.shape)
-    full_shape = featIDs.shape
-
-    # Apply a global cropping
-    slice_x1, slice_x2, slice_x3 = pf.determine_slicing(featIDs, verbose=False)
-    # slice_x1, slice_x2, slice_x3 = (slice(None, 100), slice(None, 100), slice(None, 100))
-    featIDs = featIDs[slice_x1, slice_x2, slice_x3]
-    euler = euler[slice_x1, slice_x2, slice_x3]
-    print("\tNumber of points (after crop):", featIDs.size)
-    print("\tDataset shape (after crop):", featIDs.shape)
-    cropped_shape = featIDs.shape
-
-    # Get xyz
-    x1, x2, x3 = np.indices(featIDs.shape)
-    coordinates = np.stack((x1, x2, x3), axis=-1)
-    coordinates = coordinates.reshape(-1, 3)
-    return full_shape, cropped_shape, (slice_x1, slice_x2, slice_x3), featIDs, euler, coordinates, spacing
-
-
-def get_num_jobs():
-    # Determine what the operating system is
-    operating_system = sys.platform
-    if operating_system in ["darwin", "win32", "cygwin", "msys"]:
-        print("\t-> This is a mac or windows system, determining the number of available processors.")
-        n_cpus = int(os.cpu_count() - 2)
-        # n_cpus = 2
-    else:
-        print("\t-> This is a linux system, determining the number of available processors.")
-        n_cpus = len(os.sched_getaffinity(0))
-    print("\t{} processors will be utilized.".format(n_cpus))
-    return n_cpus
-
-np.set_printoptions(linewidth=200)
-if __name__ == '__main__':
-    print("\n*** GND Calculations Python Script ***")
-    print("Inputs:\n\tConfig File: {}\n\tTest Run: {}\n\tDREAM3D File: {}\n\tID: {}\n\tBurgers Vector: {}\n\tCrystallography: {}\n\tSave Folder: {}".format(args.config, args.test, path, ID, burgers, cs, directory))
-    config_exists = os.path.isfile(args.config)
-    d3d_exists = os.path.isfile(path)
-    save_exists = os.path.isdir(directory)
-    if not config_exists: raise ValueError("The config file does not exist: {}".format(args.config))
-    if not d3d_exists: raise ValueError("The DREAM3D file does not exist: {}".format(path))
-    if not save_exists: raise ValueError("The save directory does not exist: {}".format(directory))
-    print("\t-> Grain segmentation to be performed:", args.segment)
-    print("\t-> All inputs are valid.")
-    print("\n-> Calling setup function")
-    full_shape, cropped_shape, (slice_x1, slice_x2, slice_x3), featIDs, euler, coordinates, spacing = main(path, segment=args.segment)
-
-    print("\n-> Creating GND object")
-    gnd = GND.GND(cs, burgers, slip_systems, minimization=minimization)
-    gnd.set_data(coordinates, euler, featIDs, spacing)
-    gnd.enforce_mask_on_input(gnd.featIDs == 0)
-    print("\tNumber of slip systems:", gnd.numSlip)
-    coords = list(coordinates)
-
-    print("\n-> Starting parallel computation")
-    n_processors = get_num_jobs()
-    if args.test:
-        print("Terminating the calculation, this was a test run.")
-        index = len(coords) // 4
-        while True:
-            if gnd.featIDs[coords[index][0], coords[index][1], coords[index][2]] != 0:
-                break
-            else:
-                index += 1
-        v = []
-        for i in range(10):
-            v.append(gnd.test(coords[index + i])[0])
-            # v.append(gnd.compute(coords[index + i], verbose=False)[0])
-        print("Total GND density for 10 points in the volume: {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}, {:.2e}".format(*v))
-        exit()
-
-    
-    with mpire.WorkerPool(n_jobs=n_processors, start_method="spawn") as pool:
-        # results = pool.map(gnd.test, coords, progress_bar=True)
-        results = pool.map(gnd.compute, coords, progress_bar=True)
-
-    gnd.unpack_data(results)
-    print("\t-> Calculation complete.")
-
-    # Make the output arrays
-    print("\n-> Creating output arrays")
-    gnd_sr = np.zeros(full_shape, dtype=np.float32)
-    gnd_ms = np.zeros(full_shape, dtype=np.float32)
-    gnd_ss = np.zeros(full_shape + (gnd.numSlip,), dtype=np.float32)
-    print("\tOutput shape:", gnd_ss.shape)
-    
-    # Now pack in the data, accounting for the slices
-    gnd_sr[slice_x1, slice_x2, slice_x3] = gnd.GND_SR
-    gnd_ms[slice_x1, slice_x2, slice_x3] = gnd.misori
-    gnd_ss[slice_x1, slice_x2, slice_x3] = gnd.GND_SS
-
-    # print("Mis", np.rad2deg(np.nanmin(gnd_ms)), np.rad2deg(np.nanmax(gnd_ms)))
-    # print("SR", gnd_sr.min() / 1e12, gnd_sr.max() / 1e12)
-    # import matplotlib.pyplot as plt
-    # fig, ax = plt.subplots(1, 2, figsize=(12, 6), sharex=True, sharey=True)
-    # ax[0].imshow(gnd_sr[0].T / 1e12, cmap='RdBu_r', vmax=1000)
-    # ax[0].set_title("GND_SR")
-    # ax[1].imshow(np.rad2deg(gnd_ms[0].T), cmap='jet', vmin=0.0, vmax=4.89)
-    # ax[1].set_title("Misorientation")
-    # plt.tight_layout()
-    # plt.show()
-    # exit()
-        
-    print("\t-> Saving data.")
-    np.save(directory + ID + "_GND_SR.npy", gnd_sr)
-    np.save(directory + ID + "_misori.npy", gnd_ms)
-    np.save(directory + ID + "_GND_SS.npy", gnd_ss)
-    print("Complete!")
+    h5 = h5py.File(path, "r+")
+    h5["DataStructure/ImageDataContainer/CellData/GND"][...] = (
+        dd[minimization].sum(axis=0).reshape(ids.shape + (1,))
+    )
+    h5["DataStructure/ImageDataContainer/CellData/FDAM"][...] = mis.mean(
+        axis=0
+    ).reshape(ids.shape + (1,))
+    h5.close()
