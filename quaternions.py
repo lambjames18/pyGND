@@ -72,6 +72,7 @@ def qu_prod_raw(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     bw, bx, by, bz = b[..., 0], b[..., 1], b[..., 2], b[..., 3]
 
     ow = aw * bw - ax * bx - (ay * by + az * bz)
+    ow = aw * bw - ax * bx - (ay * by + az * bz)
     ox = aw * bx + ax * bw + epsijk * (ay * bz - az * by)
     oy = aw * by + ay * bw + epsijk * (az * bx - ax * bz)
     oz = aw * bz + az * bw + epsijk * (ax * by - ay * bx)
