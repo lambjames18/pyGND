@@ -1,7 +1,7 @@
-
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
+
 # import h5py
 
 
@@ -23,7 +23,13 @@ class InteractiveSlider:
         self.ax = self.fig.add_subplot(111)
         self.ax.set_title("")
         # Show images
-        self.im = self.ax.imshow(self.stack[0], alpha=self.alphas, vmin=self.vmin, vmax=self.vmax, cmap=self.cmap)
+        self.im = self.ax.imshow(
+            self.stack[0],
+            alpha=self.alphas,
+            vmin=self.vmin,
+            vmax=self.vmax,
+            cmap=self.cmap,
+        )
         # Put slider on
         plt.subplots_adjust(left=0.15, bottom=0.15)
         left = self.ax.get_position().x0
@@ -51,8 +57,12 @@ class InteractiveSlider:
         self.im.axes.figure.canvas.draw()
         self.fig.canvas.draw_idle()
 
-path = "/Users/jameslamb/Documents/research/data/Marc_rolled-Al-EBSD/Marc_rolled-Al_GND_SR.npy"
+
+path = (
+    "/Users/jameslamb/Documents/research/data/CoNi90-thin/CoNi90-thin_basic_GND_3D.npy"
+)
 log = True
+cmap = "RdBu_r"
 
 data = np.load(path).transpose(0, 2, 1)
 print(data.shape)
@@ -62,4 +72,4 @@ if log:
 mn, mx = data[data > 0].min(), data[data > 0].max()
 print("Max:", mx, "Min:", mn)
 print("Mean:", data[data > 0].mean(), "Std:", data[data > 0].std())
-InteractiveSlider(data, vmin=mn, vmax=mx, cmap="jet")
+InteractiveSlider(data, vmin=14, vmax=15, cmap=cmap)

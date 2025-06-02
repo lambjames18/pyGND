@@ -11,19 +11,20 @@ import GND
 
 
 if __name__ == "__main__":
-    path = "/Users/jameslamb/Documents/research/data/Wrought-DIC/EBSD.dream3d"
-    cell_data_path = "DataStructure/ImageGeometry/Cell Data"
-    spacing_path = "DataStructure/ImageGeometry"
-    # path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_EBSD.dream3d"
-    # cell_data_path = "DataStructure/ImageDataContainer/CellData"
-    # spacing_path = "DataStructure/ImageDataContainer"
+    # path = "/Users/jameslamb/Documents/research/data/Wrought-DIC/EBSD.dream3d"
+    # cell_data_path = "DataStructure/ImageGeometry/Cell Data"
+    # spacing_path = "DataStructure/ImageGeometry"
+    path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_EBSD.dream3d"
+    cell_data_path = "DataStructure/ImageDataContainer/CellData"
+    spacing_path = "DataStructure/ImageDataContainer"
     dream3d_nx = True
 
     burgers = 2.48e-10
-    n_cpus = 5
+    n_cpus = 8
     cs = 1
     minimization = "l2"
     progress_bar = True
+    chunk_size = 100
 
     euler, ids = utils.read_dream3d(
         path,
@@ -35,7 +36,7 @@ if __name__ == "__main__":
     )
 
     dd, mis = GND.calculate(
-        euler, ids, cs, burgers, spacing, minimization, n_cpus, progress_bar
+        euler, ids, cs, burgers, spacing, minimization, n_cpus, progress_bar, chunk_size
     )
 
     import h5py

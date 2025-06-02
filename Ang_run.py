@@ -11,16 +11,16 @@ import GND
 
 
 if __name__ == "__main__":
-    path = (
-        "/Users/jameslamb/Documents/research/data/GaN-DED/raw/20240508_27238_flipX.ang"
-    )
-    ids_path = None
-    burgers = (3.189e10, 5.185e-10)
+    # Data
+    path = ...
+    ids_path = ...
+    burgers = ...
+    spacing = np.array([1.5, 1.5, 1.5]) * 1e-6
+    # Parameters
     n_cpus = 5
     cs = 1
     minimization = "l2"
     progress_bar = True
-    spacing = np.array([1.5, 1.5, 1.5]) * 1e-6
 
     euler, ids = utils.read_ang(
         path,
