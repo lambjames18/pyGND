@@ -40,7 +40,9 @@ def read_ang(path, ids_path=None):
     eulerangles = np.array([out["phi1"], out["PHI"], out["phi2"]]).T.astype(float)
     eulerangles = eulerangles.reshape(1, *eulerangles.shape).transpose(0, 2, 1, 3)
     if ids_path is not None:
-        ids = np.load(ids_path).reshape(eulerangles.shape[:-1])
+        grain_data = np.genfromtxt(ids_path, dtype=float, comments="#")
+        ids = grain_data[:, 8].reshape(eulerangles.shape[:-1]).astype(int)
+        # ids = np.load(ids_path).reshape(eulerangles.shape[:-1])
     else:
         ids = np.ones(eulerangles.shape[:-1], dtype=int)
     spacing = np.array([res, res, res])

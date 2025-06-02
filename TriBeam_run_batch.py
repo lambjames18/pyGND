@@ -33,6 +33,16 @@ if __name__ == "__main__":
         2.48e-10,  # CoNi_67
         2.48e-10,  # CoNi_16
     ]
+    calculate = [
+        False,  # Co_APS
+        False,  # Co_APS
+        False,  # R2S9S4
+        False,  # R2S10S1
+        True,  # R2S10S5
+        True,  # CoNi_90
+        True,  # CoNi_67
+        True,  # CoNi_16
+    ]
     n_cpus = 15
     cs = 1
     minimization = "l2"
@@ -60,26 +70,30 @@ if __name__ == "__main__":
         print("Shape:", ids.shape)
         print("Spacing:", spacing)
 
-        t0 = time.time()
-        dd, mis = GND.calculate(
-            euler,
-            ids,
-            cs,
-            burger,
-            spacing,
-            minimization=minimization,
-            n_cpus=n_cpus,
-            progress_bar=progress_bar,
-            chunk_size=chunk_size,
-        )
-        dd = dd[minimization]
-        np.save(path.replace(".dream3d", "_GND.npy"), dd)
-        np.save(path.replace(".dream3d", "_MIS.npy"), mis)
-        print("Time:", time.time() - t0)
+        if calculate[i]:
+            t0 = time.time()
+            dd, mis = GND.calculate(
+                euler,
+                ids,
+                cs,
+                burger,
+                spacing,
+                minimization=minimization,
+                n_cpus=n_cpus,
+                progress_bar=progress_bar,
+                chunk_size=chunk_size,
+            )
+            dd = dd[minimization]
+            np.save(path.replace(".dream3d", "_GND.npy"), dd)
+            np.save(path.replace(".dream3d", "_MIS.npy"), mis)
+            print("Time:", time.time() - t0)
+        else:
+            dd = np.load(path.replace(".dream3d", "_GND.npy"))
+            print("---> Loaded GND data")
 
         h5 = h5py.File(path, "r+")
-        h5["DataStructure/ImageDataContainer/CellData/GND"][...] = (
-            dd[minimization].sum(axis=0).reshape(ids.shape + (1,))
-        )
+        h5["DataContainers/ImageDataContainer/CellData/GND"][...] = dd.sum(
+            axis=0
+        ).reshape(ids.shape + (1,))
         h5.close()
         print("*" * 50)
