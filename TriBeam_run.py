@@ -11,30 +11,43 @@ import GND
 
 
 if __name__ == "__main__":
-    path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_EBSD.dream3d"
+    path = "/Users/jameslamb/Documents/research/data/Wrought-DIC/EBSD.dream3d"
+    cell_data_path = "DataStructure/ImageGeometry/Cell Data"
+    spacing_path = "DataStructure/ImageGeometry"
+    # path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_EBSD.dream3d"
+    # cell_data_path = "DataStructure/ImageDataContainer/CellData"
+    # spacing_path = "DataStructure/ImageDataContainer"
+    dream3d_nx = True
+
     burgers = 2.48e-10
     n_cpus = 5
     cs = 1
     minimization = "l2"
     progress_bar = True
-    spacing = np.array([1.5, 1.5, 1.5]) * 1e-6
 
     euler, ids = utils.read_dream3d(
         path,
-        ids_path="DataStructure/ImageDataContainer/CellData/FeatureIds",
-        euler_path="DataStructure/ImageDataContainer/CellData/EulerAngles",
+        ids_path=f"{cell_data_path}/FeatureIds",
+        euler_path=f"{cell_data_path}/EulerAngles",
     )
+    spacing = utils.read_dream3d_spacing(
+        path, spacing_path=spacing_path, dream3d_nx=dream3d_nx
+    )
+
     dd, mis = GND.calculate(
         euler, ids, cs, burgers, spacing, minimization, n_cpus, progress_bar
     )
 
     import h5py
 
-    h5 = h5py.File(path, "r+")
-    h5["DataStructure/ImageDataContainer/CellData/GND"][...] = (
-        dd[minimization].sum(axis=0).reshape(ids.shape + (1,))
-    )
-    h5["DataStructure/ImageDataContainer/CellData/FDAM"][...] = mis.mean(
-        axis=0
-    ).reshape(ids.shape + (1,))
-    h5.close()
+    try:
+        h5 = h5py.File(path, "r+")
+        h5[f"{cell_data_path}/GND"][...] = (
+            dd[minimization].sum(axis=0).reshape(ids.shape + (1,))
+        )
+        h5[f"{cell_data_path}/FDAM"][...] = mis.mean(axis=0).reshape(ids.shape + (1,))
+        h5.close()
+    except Exception as e:
+        print("Failed to write to HDF5 file.")
+        print(e)
+        h5.close()
