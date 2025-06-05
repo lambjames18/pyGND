@@ -12,21 +12,19 @@ import GND
 
 
 if __name__ == "__main__":
-    path = (
-        "/Users/jameslamb/Documents/research/data/CoNi90-thin/CoNi90-thin_basic.dream3d"
-    )
+    path = "E:/CoNi90-thin/old_d3d/CoNi90-thin.dream3d"
     burgers = 2.48e-10
-    n_cpus = 12
+    n_cpus = 15
     cs = 1
     minimization = "l2"
     progress_bar = True
-    spacing = np.array([0.1, 0.1, 0.1]) * 1e-6
-    chunk_size = 100
+    spacing = np.array([0.1, 0.1, 1.0]) * 1e-6
+    chunk_size = 1000
 
     h5 = h5py.File(path, "r")
-    euler = h5["DataStructure/ImageGeom/Cell Data/EulerAngles"][...]
+    euler = h5["DataContainers/ImageDataContainer/CellData/EulerAngles"][...]
+    ids = h5["DataContainers/ImageDataContainer/CellData/FeatureIds"][..., 0]
     h5.close()
-    ids = np.ones_like(euler[:1, :, :, 0], dtype=bool)
     print(f"Euler angles shape: {euler.shape}")
     print(f"Feature IDs shape: {ids.shape}")
 
@@ -34,9 +32,10 @@ if __name__ == "__main__":
     mis_avg = np.zeros_like(euler[..., 0], dtype=np.float32)
     mis_max = np.zeros_like(euler[..., 0], dtype=np.float32)
     for i in range(euler.shape[0]):
+        print(f"Processing slice {i + 1}/{euler.shape[0]}")
         dd_i, mis_i = GND.calculate(
             euler[i : i + 1],
-            ids,
+            ids[i : i + 1],
             cs,
             burgers,
             spacing,
@@ -49,12 +48,12 @@ if __name__ == "__main__":
         mis_avg[i] = mis_i.mean(axis=0)
         mis_max[i] = mis_i.max(axis=0)
 
-    np.save(os.path.join(os.path.dirname(path), "CoNi90-thin_basic_GND_3D.npy"), dd)
+    np.save(os.path.join(os.path.dirname(path), "CoNi90-thin_GND.npy"), dd)
     np.save(
-        os.path.join(os.path.dirname(path), "CoNi90-thin_basic_FDAM_3D_avg.npy"),
+        os.path.join(os.path.dirname(path), "CoNi90-thin_FDAM_avg.npy"),
         mis_avg,
     )
     np.save(
-        os.path.join(os.path.dirname(path), "CoNi90-thin_basic_FDAM_3D_max.npy"),
+        os.path.join(os.path.dirname(path), "CoNi90-thin_FDAM_max.npy"),
         mis_max,
     )

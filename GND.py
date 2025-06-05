@@ -465,7 +465,7 @@ def get_orientation_gradients(
     out_shape = quats.shape[:-1]
 
     # Reshape the data to be 1D
-    quats = quats.reshape(-1, 4)
+    quats = quats.reshape(-1, 4).astype(np.float32)
     pts0 = pts0.reshape(-1, 3, 3)
     pts1 = pts1.reshape(-1, 3, 3)
     distances = distances.reshape(-1, 3)
@@ -491,11 +491,16 @@ def get_orientation_gradients(
     # Get quaternion pairs
     t0 = time.time()
     q0 = np.stack(
-        [quats[pts0[:, 0]], quats[pts0[:, 1]], quats[pts0[:, 2]]], axis=1
+        [quats[pts0[:, 0]], quats[pts0[:, 1]], quats[pts0[:, 2]]],
+        axis=1,
+        dtype=np.float32,
     )  # (n_pairs, 3, 4)
     q1 = np.stack(
-        [quats[pts1[:, 0]], quats[pts1[:, 1]], quats[pts1[:, 2]]], axis=1
+        [quats[pts1[:, 0]], quats[pts1[:, 1]], quats[pts1[:, 2]]],
+        axis=1,
+        dtype=np.float32,
     )  # (n_pairs, 3, 4)
+    del quats, pts0, pts1  # Free memory
 
     # Get laue_id
     laue_id = 11 if cs == 1 or cs == 2 else 9
@@ -516,22 +521,28 @@ def get_orientation_gradients(
         chunks = zip(q0, q1)
 
         # Run the calculations in parallel
+        quats_disorientation = np.empty((N, 3, 4), dtype=np.float32)
         if progress_bar:
             with tqdm_joblib(tqdm(total=N, desc="Processing")) as progress_bar:
-                quats_disorientation = Parallel(n_jobs=n_cpus)(
+                out = Parallel(n_jobs=n_cpus)(
                     delayed(quaternions.qu_disorientation)(q0, q1, laue_id, laue_id)
                     for q0, q1 in chunks
                 )
         else:
-            quats_disorientation = Parallel(n_jobs=n_cpus)(
+            out = Parallel(n_jobs=n_cpus)(
                 delayed(quaternions.qu_disorientation)(q0, q1, laue_id, laue_id)
                 for q0, q1 in chunks
             )
+        del q0, q1  # Free memory
 
         # Concatenate the results
-        quats_disorientation = np.concatenate(quats_disorientation, axis=0).transpose(
-            1, 0, 2
-        )
+        start_idx = 0
+        for chunk in out:
+            end_idx = start_idx + chunk.shape[0]
+            quats_disorientation[start_idx : start_idx + chunk.shape[0]] = chunk
+            start_idx = end_idx
+        del out, chunk
+        quats_disorientation = quats_disorientation.transpose(1, 0, 2)
 
     # Convert quaternions to rotation vectors
     rot_vectors = quaternions.qu_log(quats_disorientation) * 2

@@ -14,17 +14,17 @@ if __name__ == "__main__":
     # path = "/Users/jameslamb/Documents/research/data/Wrought-DIC/EBSD.dream3d"
     # cell_data_path = "DataStructure/ImageGeometry/Cell Data"
     # spacing_path = "DataStructure/ImageGeometry"
-    path = "/Users/jameslamb/Documents/research/data/CoNi-DIC-S1/stitched_EBSD.dream3d"
-    cell_data_path = "DataStructure/ImageDataContainer/CellData"
-    spacing_path = "DataStructure/ImageDataContainer"
-    dream3d_nx = True
+    path = "E:/CoNi90-thin/old_d3d/CoNi90-thin.dream3d"
+    cell_data_path = "DataContainers/ImageDataContainer/CellData"
+    spacing_path = "DataContainers/ImageDataContainer/_SIMPL_GEOMETRY/SPACING"
+    dream3d_nx = False
 
     burgers = 2.48e-10
     n_cpus = 8
     cs = 1
     minimization = "l2"
     progress_bar = True
-    chunk_size = 100
+    chunk_size = 500
 
     euler, ids = utils.read_dream3d(
         path,
@@ -46,7 +46,10 @@ if __name__ == "__main__":
         h5[f"{cell_data_path}/GND"][...] = (
             dd[minimization].sum(axis=0).reshape(ids.shape + (1,))
         )
-        h5[f"{cell_data_path}/FDAM"][...] = mis.mean(axis=0).reshape(ids.shape + (1,))
+        h5[f"{cell_data_path}/FDM_avg"][...] = mis.mean(axis=0).reshape(
+            ids.shape + (1,)
+        )
+        h5[f"{cell_data_path}/FDM_max"][...] = mis.max(axis=0).reshape(ids.shape + (1,))
         h5.close()
     except Exception as e:
         print("Failed to write to HDF5 file.")
