@@ -12,14 +12,15 @@ import GND
 
 
 if __name__ == "__main__":
-    path = "E:/CoNi90-thin/old_d3d/CoNi90-thin.dream3d"
+    path = "/Users/jameslamb/Documents/research/data/CoNi90-thin/CoNi90-thin_merged.dream3d"
+    # path = "E:/CoNi90-thin/old_d3d/CoNi90-thin.dream3d"
     burgers = 2.48e-10
-    n_cpus = 15
+    n_cpus = 20
     cs = 1
     minimization = "l2"
     progress_bar = True
     spacing = np.array([0.1, 0.1, 1.0]) * 1e-6
-    chunk_size = 1000
+    chunk_size = 100
 
     h5 = h5py.File(path, "r")
     euler = h5["DataContainers/ImageDataContainer/CellData/EulerAngles"][...]

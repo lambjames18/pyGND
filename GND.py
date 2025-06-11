@@ -466,6 +466,7 @@ def get_orientation_gradients(
 
     # Reshape the data to be 1D
     quats = quats.reshape(-1, 4).astype(np.float32)
+    N = quats.shape[0]
     pts0 = pts0.reshape(-1, 3, 3)
     pts1 = pts1.reshape(-1, 3, 3)
     distances = distances.reshape(-1, 3)
@@ -517,13 +518,15 @@ def get_orientation_gradients(
         # Split the data into chunks
         q0 = np.array_split(q0, q0.shape[0] // chunk_size)
         q1 = np.array_split(q1, q1.shape[0] // chunk_size)
-        N = len(q0)
+        n_chunks = len(q0)
         chunks = zip(q0, q1)
 
         # Run the calculations in parallel
         quats_disorientation = np.empty((N, 3, 4), dtype=np.float32)
         if progress_bar:
-            with tqdm_joblib(tqdm(total=N, desc="Processing")) as progress_bar:
+            with tqdm_joblib(
+                tqdm(total=n_chunks, desc="Calculating orientation gradients")
+            ) as progress_bar:
                 out = Parallel(n_jobs=n_cpus)(
                     delayed(quaternions.qu_disorientation)(q0, q1, laue_id, laue_id)
                     for q0, q1 in chunks
@@ -537,15 +540,16 @@ def get_orientation_gradients(
 
         # Concatenate the results
         start_idx = 0
-        for chunk in out:
+        for chunk in tqdm(out, desc="Unpacking orientation gradients"):
             end_idx = start_idx + chunk.shape[0]
-            quats_disorientation[start_idx : start_idx + chunk.shape[0]] = chunk
+            quats_disorientation[start_idx:end_idx] = chunk
             start_idx = end_idx
         del out, chunk
         quats_disorientation = quats_disorientation.transpose(1, 0, 2)
 
     # Convert quaternions to rotation vectors
     rot_vectors = quaternions.qu_log(quats_disorientation) * 2
+    del quats_disorientation  # Free memory
 
     # Get the misorientations from the rotation vectors
     misorientation = np.linalg.norm(rot_vectors, axis=-1)
@@ -564,15 +568,22 @@ def get_orientation_gradients(
     return gradient_tensors, misorientation
 
 
-def _minimize_l2(Lambda: np.ndarray, B: np.ndarray) -> np.ndarray:
+def _minimize_l2(Lambda: np.ndarray, B: np.ndarray, chunk_size=None) -> np.ndarray:
     """Perform the minimization using the L2 norm.
 
     Args:
         Lambda: The Nye tensor components. Shape (n_voxels, 9)
         B: The B matrix. Shape (n_slip_systems, 9)
+        chunk_size: The size of the chunks to process in parallel. If None, the entire array is processed at once.
 
     Returns:
         np.ndarray: The dislocation density. Shape (n_slip_systems, n_voxels)"""
+    if chunk_size is None:
+        out = B.dot(Lambda.T).reshape((-1,))
+    else:
+        # Split Lambda into chunks
+        chunks = np.array_split(Lambda, Lambda.shape[0] // chunk_size)
+        out = np.hstack([B.dot(chunk.T).reshape((-1,)) for chunk in chunks])
     return B.dot(Lambda.T).reshape((-1,))
 
 
@@ -647,7 +658,8 @@ def minimize(
     Lambda = alpha.reshape(-1, 9)
     out_shape = (A.shape[1],) + shape
     if minimization == "l2":
-        dd = _minimize_l2(Lambda, B).reshape(out_shape)
+        print("Performing L2 minimization...")
+        dd = _minimize_l2(Lambda, B, chunk_size).reshape(out_shape)
 
     elif minimization == "l1":
         # Setup chunk size
@@ -788,8 +800,10 @@ def calculate(
 
     # Convert Euler angles to quaternions
     quats = rotations.eu2qu(euler)
+    del euler  # Free memory
 
     # Get the finite difference coordinates
+    print("Getting finite difference coordinates...")
     nbrs0, nbrs1, distances = get_finite_difference_coordinates(ids)
     distances *= spacing
 
@@ -804,6 +818,7 @@ def calculate(
         progress_bar=progress_bar,
         chunk_size=chunk_size,
     )
+    del quats, nbrs0, nbrs1, distances  # Free memory
     mis = np.rad2deg(mis)
     mis = mis.transpose(3, 0, 1, 2)  # (..., 3) -> (3, ...)
 
@@ -812,6 +827,7 @@ def calculate(
     alpha = dphi.transpose(0, 1, 2, 4, 3) - trace[..., None, None] * np.eye(3).reshape(
         1, 1, 1, 3, 3
     )
+    del dphi, trace  # Free memory
 
     # Minimize the dislocation density
     dd = {}
