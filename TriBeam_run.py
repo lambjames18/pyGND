@@ -23,7 +23,7 @@ if __name__ == "__main__":
     # Burgers vector magnitude in m
     burgers = 2.48e-10
     # Number of CPU cores to use
-    n_cpus = 10
+    n_cpus = 12
     # Crystal structure, 1 = FCC, 2 = BCC, 3 = HCP
     cs = 1
     # "l2" or "l1" (where l1 is the absolute value); l2 is faster, l1 may be more accurate
@@ -60,11 +60,11 @@ if __name__ == "__main__":
     else:
         raise ValueError("units must be one of 'nm', 'um', 'mm', or 'm'")
 
-    calc = True
+    calc = False
     if calc:
-        dd, mis = GND.calculate(
-            euler,
-            ids,
+        dd1, mis1 = GND.calculate(
+            euler[:101],
+            ids[:101],
             cs,
             burgers,
             spacing,
@@ -73,40 +73,56 @@ if __name__ == "__main__":
             progress_bar,
             chunk_size,
         )
-        np.save("dd.npy", dd[minimization])
-        np.save("mis.npy", mis)
+        np.save("dd1.npy", dd1[minimization])
+        np.save("mis1.npy", mis1)
+
+        dd2, mis2 = GND.calculate(
+            euler[99:],
+            ids[99:],
+            cs,
+            burgers,
+            spacing,
+            minimization,
+            n_cpus,
+            progress_bar,
+            chunk_size,
+        )
+        np.save("dd2.npy", dd2[minimization])
+        np.save("mis2.npy", mis2)
     else:
         print("Reading in calculated data from .npy files")
-        dd = np.load("dd.npy")
-        mis = np.load("mis.npy")
-        dd = {minimization: dd}
+        dd1 = np.load("dd1.npy")
+        mis1 = np.load("mis1.npy")
+        dd2 = np.load("dd2.npy")
+        mis2 = np.load("mis2.npy")
+
+    dd = {
+        minimization: np.empty(
+            (dd1.shape[0], dd1.shape[1] + dd2.shape[1] - 2, dd1.shape[2], dd1.shape[3]),
+            dtype=dd1.dtype,
+        )
+    }
+    dd[minimization][:, : dd1.shape[1] - 1] = dd1[:, :-1]
+    dd[minimization][:, dd1.shape[1] - 1 :] = dd2[:, 1:]
+    del dd1, dd2  # Free memory
 
     # print("dd1:", dd1.shape, "mis1:", mis1.shape)
     # print("dd2:", dd2.shape, "mis2:", mis2.shape)
-    # dd = {
-    #     minimization: np.empty(
-    #         (dd1.shape[0], dd1.shape[1] + dd2.shape[1] - 2, dd1.shape[2], dd1.shape[3]),
-    #         dtype=dd1.dtype,
-    #     )
-    # }
-    # dd[minimization][:, : dd1.shape[1] - 1] = dd1[:, :-1]
-    # dd[minimization][:, dd1.shape[1] - 1 :] = dd2[:, 1:]
-    # del dd1, dd2  # Free memory
     # print("dd:", dd[minimization].shape)
-
-    # mis = np.empty(
-    #     (
-    #         mis1.shape[0],
-    #         mis1.shape[1] + mis2.shape[1] - 2,
-    #         mis1.shape[2],
-    #         mis1.shape[3],
-    #     ),
-    #     dtype=mis1.dtype,
-    # )
-    # mis[:, : mis1.shape[1] - 1] = mis1[:, :-1]
-    # mis[:, mis1.shape[1] - 1 :] = mis2[:, 1:]
-    # del mis1, mis2  # Free memory
     # print("mis:", mis.shape)
+
+    mis = np.empty(
+        (
+            mis1.shape[0],
+            mis1.shape[1] + mis2.shape[1] - 2,
+            mis1.shape[2],
+            mis1.shape[3],
+        ),
+        dtype=mis1.dtype,
+    )
+    mis[:, : mis1.shape[1] - 1] = mis1[:, :-1]
+    mis[:, mis1.shape[1] - 1 :] = mis2[:, 1:]
+    del mis1, mis2  # Free memory
 
     # Save the results back to the DREAM3D file
     import h5py
