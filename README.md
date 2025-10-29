@@ -8,3 +8,12 @@ GND code for use with TriBeam 3D Microstructures. The code was originally develo
 There are a couple other files that are usefull for looking at the output and putting the output into the DREAM.3D file (for further analysis of a TriBeam dataset).
 
 The "Matlab" folder contains the original code that Wyatt used for the papers listed above. This code is not used, but is just here for reference (and might get removed later).
+
+
+### Dependencies
+- numpy
+- scipy
+- h5py
+- matplotlib
+- tqdm
+- joblib
