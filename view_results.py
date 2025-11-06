@@ -1,8 +1,24 @@
+import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
+from utillities import extract_path_from_h5
 
-# import h5py
+
+######################################
+# Path to either a npy or dream3d file
+path = ...
+
+# Take the log10 of the data for visualization (recommended for GND densities)
+log = True
+
+# Colormap for visualization
+cmap = "RdBu_r"
+
+# Minimum and maximum values for visualization (set to None for automatic)
+vmin = None
+vmax = None
+######################################
 
 
 class InteractiveSlider:
@@ -58,18 +74,36 @@ class InteractiveSlider:
         self.fig.canvas.draw_idle()
 
 
-path = (
-    "/Users/jameslamb/Documents/research/data/CoNi90-thin/CoNi90-thin_basic_GND_3D.npy"
-)
-log = True
-cmap = "RdBu_r"
+# Create a function that parses an HDF5 file and extracts the string path to a data array titled "GND"
 
-data = np.load(path).transpose(0, 2, 1)
-print(data.shape)
+
+if path.endswith(".dream3d"):
+    gnd_path = extract_path_from_h5(path, "GND")
+    print("GND data path:", gnd_path)
+    h5 = h5py.File(path, "r")
+    data = h5[gnd_path][..., 0]
+    h5.close()
+
+if path.endswith(".npy"):
+    data = np.load(path)
+    data = data.sum(axis=0)
+
 if log:
     data = np.log10(data, where=data > 0)
 
-mn, mx = data[data > 0].min(), data[data > 0].max()
-print("Max:", mx, "Min:", mn)
-print("Mean:", data[data > 0].mean(), "Std:", data[data > 0].std())
-InteractiveSlider(data, vmin=14, vmax=15, cmap=cmap)
+non_zero = data[data > 0]
+mn, mx, mean, std = non_zero.min(), non_zero.max(), non_zero.mean(), non_zero.std()
+
+print("Data Summary:")
+print("Data shape:", data.shape)
+print("Max:", mx)
+print("Non-zero min:", mn)
+print("Mean:", mean)
+print("Std:", std)
+
+vmin = vmin if vmin is not None else mn
+vmax = vmax if vmax is not None else mx
+
+print(f"Visualization range: vmin={vmin}, vmax={vmax}")
+
+InteractiveSlider(data, vmin=vmin, vmax=vmax, cmap=cmap)

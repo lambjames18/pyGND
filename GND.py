@@ -10,6 +10,10 @@ import rotations
 import quaternions
 from utillities import tqdm_joblib
 
+import warnings
+
+warnings.filterwarnings("ignore", category=UserWarning)
+
 
 def get_linear_operator(
     cs: int, slip_systems: str = "all"
@@ -50,8 +54,8 @@ def get_linear_operator(
 
     # Create the A matrix for the given crystal structure
     if cs == 1:
-        a = np.sqrt(3) / 9
-        c = np.sqrt(3) / 84
+        a = np.sqrt(3).astype(np.float32) / 9
+        c = np.sqrt(3).astype(np.float32) / 84
         d = 1 / 18
         f = 3 / 14
 
@@ -77,7 +81,7 @@ def get_linear_operator(
                 [5 * d, 0, -f, 0, -d, 0, -f, 0, 5 * d],
                 [-d, 0, 0, 0, 5 * d, -f, 0, -f, 5 * d],
             ]
-        )
+        ).astype(np.float32)
 
         # FCC
         A = pseudo_inverse(B)
@@ -527,12 +531,12 @@ def get_orientation_gradients(
             with tqdm_joblib(
                 tqdm(total=n_chunks, desc="Calculating orientation gradients")
             ) as progress_bar:
-                out = Parallel(n_jobs=n_cpus)(
+                out = Parallel(n_jobs=n_cpus, timeout=9999999)(
                     delayed(quaternions.qu_disorientation)(q0, q1, laue_id, laue_id)
                     for q0, q1 in chunks
                 )
         else:
-            out = Parallel(n_jobs=n_cpus)(
+            out = Parallel(n_jobs=n_cpus, timeout=9999999)(
                 delayed(quaternions.qu_disorientation)(q0, q1, laue_id, laue_id)
                 for q0, q1 in chunks
             )
@@ -674,7 +678,7 @@ def minimize(
             chunks = tqdm(chunks, desc="Minimizing (L1) chunks")
 
         # Process chunks in parallel
-        with Parallel(n_jobs=n_cpus) as parallel:
+        with Parallel(n_jobs=n_cpus, timeout=9999999) as parallel:
             chunk_results = parallel(
                 delayed(_minimize_l1)(chunk, A) for chunk in chunks
             )
@@ -741,6 +745,7 @@ def calculate(
     euler: np.ndarray,
     ids: np.ndarray,
     cs: int,
+    slip_systems: str,
     burgers: Tuple[float, tuple],
     spacing: tuple,
     minimization: Tuple[str, tuple] = "l2",
@@ -796,7 +801,7 @@ def calculate(
             raise ValueError("The minimization scheme must be either 'l1' or 'l2'")
 
     # Get the linear operator
-    A, B = get_linear_operator(cs)
+    A, B = get_linear_operator(cs, slip_systems)
 
     # Convert Euler angles to quaternions
     quats = rotations.eu2qu(euler)

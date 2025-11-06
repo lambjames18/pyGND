@@ -51,47 +51,130 @@ def read_ang(path, ids_path=None):
 
 def read_dream3d(
     path: str,
-    ids_path: str = "DataContainers/ImageDataContainer/CellData/FeatureIds",
-    euler_path: str = "DataContainers/ImageDataContainer/CellData/EulerAngles",
+    ids_name: str = "FeatureIds",
+    euler_name: str = "EulerAngles",
+    spacing_units: str = "microns",
 ) -> tuple:
     """Reads a dream3d file into a numpy array"""
 
-    h5 = h5py.File(path, "r")
-    try:
-        ids = h5[ids_path][..., 0]
-    except KeyError:
+    ids = np.squeeze(extract_data_from_h5(path, ids_name))
+    if ids is None:
         raise KeyError(
-            f"Could not find the FeatureIds array at the path {ids_path} wihtin the dream3d file."
+            f"Could not find a data array with the name '{ids_name}' in the dream3d file."
         )
 
-    try:
-        eulerangles = h5[euler_path][...]
-    except KeyError:
+    eulerangles = extract_data_from_h5(path, euler_name)
+    if eulerangles is None:
         raise KeyError(
-            f"Could not find the EulerAngles array at the path {euler_path} wihtin the dream3d file."
+            f"Could not find a data array with the name '{euler_name}' in the dream3d file."
         )
 
-    return eulerangles, ids
+    spacing = read_dream3d_spacing(path, spacing_units=spacing_units)
+
+    return eulerangles, ids, spacing
 
 
-def read_dream3d_spacing(
-    path: str, spacing_path: str, dream3d_nx: bool = False
-) -> np.ndarray:
+def extract_path_from_h5(h5_file_path, target_name):
+    with h5py.File(h5_file_path, "r") as h5:
+
+        def recursive_search(name, obj):
+            if isinstance(obj, h5py.Dataset):
+                if name.endswith(target_name):
+                    return name
+                else:
+                    return None
+            for key, item in obj.items():
+                result = recursive_search(f"{name}/{key}", item)
+                if result:
+                    return result
+            return None
+
+        path = recursive_search("", h5)
+    return path
+
+
+def extract_attribute_from_h5(h5_file_path, attribute_name):
+    with h5py.File(h5_file_path, "r") as h5:
+
+        def recursive_search(name, obj):
+            if isinstance(obj, h5py.Group):
+                if attribute_name in obj.attrs:
+                    return obj.attrs[attribute_name]
+            for key, item in obj.items():
+                result = recursive_search(f"{name}/{key}", item)
+                if result is not None:
+                    return result
+            return None
+
+        attribute_value = recursive_search("", h5)
+    return attribute_value
+
+
+def extract_data_from_h5(h5_file_path, target_name):
+    with h5py.File(h5_file_path, "r") as h5:
+
+        def recursive_search(name, obj):
+            if isinstance(obj, h5py.Dataset):
+                if name.endswith(target_name):
+                    return obj[...]
+                else:
+                    return None
+            for key, item in obj.items():
+                result = recursive_search(f"{name}/{key}", item)
+                if result is not None:
+                    return result
+            return None
+
+        data_array = recursive_search("", h5)
+    return data_array
+
+
+def read_dream3d_spacing(path: str, spacing_units: str = "microns") -> np.ndarray:
     """Read the spacing from a dream3d file."""
-    h5 = h5py.File(path, "r")
-    try:
-        if dream3d_nx:
-            spacing = h5[spacing_path].attrs["_SPACING"][...]
-        else:
-            spacing = h5[spacing_path][...]
-    except KeyError:
-        raise KeyError(
-            f"Could not find the spacing array at the path {spacing_path} wihtin the dream3d file."
+    spacing = extract_data_from_h5(path, "SPACING")
+
+    # If the spacing path isn't found, it is likely a dream3dnx file and spacing is an attribute
+    if spacing is None:
+        spacing = extract_attribute_from_h5(path, "_SPACING")
+        if spacing is None:
+            raise ValueError(
+                "Could not find spacing information in the dream3d file. Attempted to find a 'SPACING' dataset (DREAM3D format) and a '_SPACING' attribute (DREAM3DNX format)."
+            )
+
+    # Convert spacing to meters
+    if (
+        spacing_units == "nm"
+        or spacing_units == "nanometer"
+        or spacing_units == "nanometers"
+    ):
+        spacing *= 1e-9
+    elif (
+        spacing_units == "um"
+        or spacing_units == "micron"
+        or spacing_units == "microns"
+        or spacing_units == "micrometer"
+        or spacing_units == "micrometers"
+        or "µm"
+    ):
+        spacing *= 1e-6
+    elif (
+        spacing_units == "mm"
+        or spacing_units == "millimeter"
+        or spacing_units == "millimeters"
+    ):
+        spacing *= 1e-3
+    elif spacing_units == "m" or spacing_units == "meter" or spacing_units == "meters":
+        pass
+    else:
+        raise ValueError(
+            "units must be one of 'nm', 'nanometer', 'um', 'µm', 'micron', 'microns', 'micrometer', 'micrometers', 'mm', 'millimeter', 'millimeters', 'm', or 'meters'."
         )
+
     return spacing
 
 
 def standardize_axis(ax, grid=True, **kwargs):
+
     kwargs["labelsize"] = kwargs.get("labelsize", 20)
     kwargs["labelcolor"] = kwargs.get("labelcolor", "k")
     kwargs["direction"] = kwargs.get("direction", "in")
@@ -196,3 +279,14 @@ def tqdm_joblib(tqdm_object):
     finally:
         joblib.parallel.BatchCompletionCallBack = old_batch_callback
         tqdm_object.close()
+
+
+if __name__ == "__main__":
+
+    path = "/Users/jameslamb/Downloads/Test.dream3d"
+    spacing = read_dream3d_spacing(path)
+    print("Spacing:", spacing)
+
+    path = "/Users/jameslamb/Documents/research/data/IN718SS_Justine/Testing_Cropped_IN718SS.dream3d"
+    spacing = read_dream3d_spacing(path)
+    print("Spacing:", spacing)
