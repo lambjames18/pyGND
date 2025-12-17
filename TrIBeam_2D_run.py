@@ -6,9 +6,9 @@ import os
 import numpy as np
 import h5py
 
-import utillities as utils
+import src.pygnd.utils as utils
 import py_functions as pf
-import GND
+import src.pygnd.core as core
 
 
 if __name__ == "__main__":
@@ -34,7 +34,7 @@ if __name__ == "__main__":
     mis_max = np.zeros_like(euler[..., 0], dtype=np.float32)
     for i in range(euler.shape[0]):
         print(f"Processing slice {i + 1}/{euler.shape[0]}")
-        dd_i, mis_i = GND.calculate(
+        dd_i, mis_i = core.calculate(
             euler[i : i + 1],
             ids[i : i + 1],
             cs,

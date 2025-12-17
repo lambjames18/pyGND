@@ -7,9 +7,9 @@ import numpy as np
 import h5py
 import time
 
-import utillities as utils
+import src.pygnd.utils as utils
 import py_functions as pf
-import GND
+import src.pygnd.core as core
 
 
 if __name__ == "__main__":
@@ -72,7 +72,7 @@ if __name__ == "__main__":
 
         if calculate[i]:
             t0 = time.time()
-            dd, mis = GND.calculate(
+            dd, mis = core.calculate(
                 euler,
                 ids,
                 cs,
