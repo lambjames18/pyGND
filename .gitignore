@@ -9,3 +9,5 @@ __pycache__/py_functions.cpython-310.pyc
 *.mat
 *.ini
 __pycache__/py_functions.cpython-310.pyc
+*.png
+*.json

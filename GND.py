@@ -14,6 +14,8 @@ import warnings
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
+precision = np.float32
+
 
 def get_linear_operator(
     cs: int, slip_systems: str = "all"
@@ -54,8 +56,8 @@ def get_linear_operator(
 
     # Create the A matrix for the given crystal structure
     if cs == 1:
-        a = np.sqrt(3).astype(np.float32) / 9
-        c = np.sqrt(3).astype(np.float32) / 84
+        a = np.sqrt(3).astype(precision) / 9
+        c = np.sqrt(3).astype(precision) / 84
         d = 1 / 18
         f = 3 / 14
 
@@ -81,7 +83,7 @@ def get_linear_operator(
                 [5 * d, 0, -f, 0, -d, 0, -f, 0, 5 * d],
                 [-d, 0, 0, 0, 5 * d, -f, 0, -f, 5 * d],
             ]
-        ).astype(np.float32)
+        ).astype(precision)
 
         # FCC
         A = pseudo_inverse(B)
@@ -271,7 +273,7 @@ def pseudo_inverse(A: np.ndarray) -> np.ndarray:
     Returns:
         np.ndarray: The B matrix. Shape (n_slip_systems, 9)
     """
-    return A.T.dot(np.linalg.inv(A.dot(A.T)))
+    return A.T.dot(np.linalg.inv(A.dot(A.T))).astype(precision)
 
 
 def get_completeness(grain_ids: np.ndarray) -> np.ndarray:
@@ -374,7 +376,7 @@ def get_neighbors(completeness: np.ndarray) -> np.ndarray:
     # Create coordinate shifts for the pairs and the scale for the finite difference calculation
     shifts0 = np.zeros((3,) + shape + (3,), dtype=np.int32)
     shifts1 = np.zeros((3,) + shape + (3,), dtype=np.int32)
-    scale = np.zeros(shape + (3,), dtype=np.float32)
+    scale = np.zeros(shape + (3,), dtype=precision)
 
     # Only central and backward differences will have a shift in the first point
     shifts0[0][(completeness[..., 0] == 2) | (completeness[..., 0] == 3)] = [-1, 0, 0]
@@ -469,7 +471,7 @@ def get_orientation_gradients(
     out_shape = quats.shape[:-1]
 
     # Reshape the data to be 1D
-    quats = quats.reshape(-1, 4).astype(np.float32)
+    quats = quats.reshape(-1, 4).astype(precision)
     N = quats.shape[0]
     pts0 = pts0.reshape(-1, 3, 3)
     pts1 = pts1.reshape(-1, 3, 3)
@@ -498,12 +500,12 @@ def get_orientation_gradients(
     q0 = np.stack(
         [quats[pts0[:, 0]], quats[pts0[:, 1]], quats[pts0[:, 2]]],
         axis=1,
-        dtype=np.float32,
+        dtype=precision,
     )  # (n_pairs, 3, 4)
     q1 = np.stack(
         [quats[pts1[:, 0]], quats[pts1[:, 1]], quats[pts1[:, 2]]],
         axis=1,
-        dtype=np.float32,
+        dtype=precision,
     )  # (n_pairs, 3, 4)
     del quats, pts0, pts1  # Free memory
 
@@ -526,7 +528,7 @@ def get_orientation_gradients(
         chunks = zip(q0, q1)
 
         # Run the calculations in parallel
-        quats_disorientation = np.empty((N, 3, 4), dtype=np.float32)
+        quats_disorientation = np.empty((N, 3, 4), dtype=precision)
         if progress_bar:
             with tqdm_joblib(
                 tqdm(total=n_chunks, desc="Calculating orientation gradients")
@@ -609,19 +611,27 @@ def _minimize_l1(Lambda: np.ndarray, A: np.ndarray) -> np.ndarray:
     dd = np.zeros((n_slip_systems, N))
 
     # Run minimzation for each point
+    bad_count = 0
     for i in range(N):
         c = np.hstack((np.zeros(n_slip_systems), np.ones(n_slip_systems)))
-        A_eq = np.hstack([A, np.zeros((n_constraints, n_slip_systems))])
+        A_eq = np.hstack(
+            [A, np.zeros((n_constraints, n_slip_systems), dtype=precision)]
+        )
         b_eq = Lambda[i].reshape(-1)
         I = np.eye(n_slip_systems)
         A_ub = np.vstack([np.hstack([I, -I]), np.hstack([-I, -I])])
-        b_ub = np.zeros(2 * n_slip_systems)
-        bounds = [(0, np.inf)] * n_slip_systems * 2
-        bounds = np.array(bounds)
+        b_ub = np.zeros(2 * n_slip_systems, dtype=precision)
+        bounds = [(0.0, np.inf)] * n_slip_systems * 2
+        bounds = np.array(bounds, dtype=precision)
         result = optimize.linprog(
             c, A_eq=A_eq, b_eq=b_eq, A_ub=A_ub, b_ub=b_ub, bounds=bounds, method="highs"
         )
-        dd[:, i] = result.x[:n_slip_systems]
+        if not result.success:
+            dd[:, i] = 0
+            bad_count += 1
+        else:
+            dd[:, i] = result.x[:n_slip_systems]
+    print(f"L1 minimization: {bad_count} failed optimizations out of {N}")
     return dd
 
 
@@ -785,6 +795,8 @@ def calculate(
         raise ValueError(
             "The spacing must have the same number of dimensions as the Euler angles"
         )
+
+    euler = euler.astype(precision)
 
     # Handle minimization
     if isinstance(minimization, tuple):

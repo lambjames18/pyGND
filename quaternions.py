@@ -22,7 +22,6 @@ https://github.com/facebookresearch/pynp3d
 
 import numpy as np
 from tqdm import tqdm
-import rotations
 from rotations import epsijk
 from joblib import Parallel, delayed
 
@@ -77,11 +76,6 @@ def qu_prod_raw(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     oy = aw * by + ay * bw + epsijk * (az * bx - ax * bz)
     oz = aw * bz + az * bw + epsijk * (ax * by - ay * bx)
 
-    # Without the P factor
-    # ow = aw * bw - ax * bx - ay * by - az * bz
-    # ox = aw * bx + ax * bw + ay * bz - az * by
-    # oy = aw * by - ax * bz + ay * bw + az * bx
-    # oz = aw * bz + ax * by - ay * bx + az * bw
     return np.stack((ow, ox, oy, oz), -1)
 
 

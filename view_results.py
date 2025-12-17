@@ -7,7 +7,8 @@ from utillities import extract_path_from_h5
 
 ######################################
 # Path to either a npy or dream3d file
-path = ...
+path = "dd_l2.npy"
+path = "/Users/jameslamb/coding/research/TriBeam_GND/demo_data/CoNi.dream3d"
 
 # Take the log10 of the data for visualization (recommended for GND densities)
 log = True
@@ -78,7 +79,11 @@ class InteractiveSlider:
 
 
 if path.endswith(".dream3d"):
-    gnd_path = extract_path_from_h5(path, "GND")
+    for key in ["GND", "GND_l1", "GND_l2"]:
+        gnd_path = extract_path_from_h5(path, key)
+        if gnd_path is not None:
+            break
+
     print("GND data path:", gnd_path)
     h5 = h5py.File(path, "r")
     data = h5[gnd_path][..., 0]
