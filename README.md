@@ -35,7 +35,7 @@ pip install -e .
 
 ## Quick Start
 
-### Basic Example
+### Example calculation for an ANG file
 
 ```python
 import pygnd
@@ -53,7 +53,7 @@ pygnd.calculate_and_save(
 )
 ```
 
-### Advanced Example with DREAM.3D
+### Example calculation for a DREAM.3D file
 
 ```python
 import pygnd
