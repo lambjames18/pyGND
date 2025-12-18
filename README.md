@@ -120,10 +120,9 @@ Available slip system options:
 
 ## Output
 
-The package saves results in multiple formats:
-- NumPy arrays (`.npy`)
-- VTK files for visualization
-- DREAM.3D compatible outputs
+The package saves results in `.npy` files by default. If a DREAM.3D file is used, it will attempt to add the output to the DREAM.3D file directly. In the case of an ANG file, images of the result are saved in addition to the `.npy` raw data. Raw data is saved in the following format:
+- `gnd_l1.npy` or `gnd_l2.npy`: shape (n_slip_systems, Z, Y, X), to get the full GND density, sum across the first (n_slip_systems) axis.
+- `fdm.npy`: shape (3, Z, Y, X), to get the average finite difference misorientation, take the mean along the first axis.
 
 ## Dependencies
 
