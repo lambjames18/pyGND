@@ -6,11 +6,41 @@ import pytest
 from pygnd import io
 
 
+def create_dream3d_dummy_file(tmp_path):
+    """Create a dummy DREAM.3D file for testing."""
+    file_path = tmp_path / "dummy.dream3d"
+    # Layered structure of a DREAM.3D file
+    # File
+    #  \__ /DataContainers
+    #      \__ /ImageDataContainer
+    #            \__ /CellData
+    #                 \__ /FeatureIds (dataset)
+    #                 \__ /EulerAngles (dataset)
+    #  \__ /_SIMPL_GEOMETRY
+    #       \__ /SPACING (dataset)
+
+    shape = (5, 5, 5)
+    with h5py.File(file_path, "w") as f:
+        data_container = f.create_group("DataContainers/ImageDataContainer/CellData")
+        feature_ids = np.arange(np.prod(shape), dtype=np.int32).reshape(shape + (1,))
+        euler_angles = np.random.rand(np.prod(shape), 3).astype(np.float32).reshape(shape + (3,))
+        data_container.create_dataset("FeatureIds", data=feature_ids)
+        data_container.create_dataset("EulerAngles", data=euler_angles)
+
+        simpl_geometry = f.create_group("_SIMPL_GEOMETRY")
+        spacing = np.array([1.5, 1.5, 1.5], dtype=np.float32)
+        simpl_geometry.create_dataset("SPACING", data=spacing)
+        # Add dummy attribute to _SIMPL_GEOMETRY
+        simpl_geometry.attrs["TEST"] = np.array([1], dtype=np.float32)
+    return file_path
+
+
 class TestReadDREAM3DData:
     """Tests for read_dream3d function."""
 
-    def test_read_valid_file(self, dream3d_file):
+    def test_read_valid_file(self, tmp_path):
         """Test reading a valid DREAM.3D file."""
+        dream3d_file = create_dream3d_dummy_file(tmp_path)
         ids_name = "FeatureIds"
         euler_name = "EulerAngles"
         spacing_units = "um"
@@ -26,13 +56,15 @@ class TestReadDREAM3DData:
         with pytest.raises(FileNotFoundError):
             io.read_dream3d("non_existent_file.dream3d", "FeatureIds", "EulerAngles")
 
-    def test_invalid_ids_name(self, dream3d_file):
+    def test_invalid_ids_name(self, tmp_path):
         """Test reading with an invalid Feature IDs name."""
+        dream3d_file = create_dream3d_dummy_file(tmp_path)
         with pytest.raises(KeyError):
             io.read_dream3d(dream3d_file, "InvalidIDs", "EulerAngles")
 
-    def test_invalid_euler_name(self, dream3d_file):
+    def test_invalid_euler_name(self, tmp_path):
         """Test reading with an invalid Euler Angles name."""
+        dream3d_file = create_dream3d_dummy_file(tmp_path)
         with pytest.raises(KeyError):
             io.read_dream3d(dream3d_file, "FeatureIds", "InvalidEuler")
 
@@ -107,8 +139,9 @@ class TestSaveDREAM3DData:
 class TestReadDREAM3DSpacing:
     """Tests for read_dream3d_spacing function."""
 
-    def test_read_valid_spacing(self, dream3d_file):
+    def test_read_valid_spacing(self, tmp_path):
         """Test reading spacing from a valid DREAM.3D file."""
+        dream3d_file = create_dream3d_dummy_file(tmp_path)
         spacing_units = "um"
         spacing = io.read_dream3d_spacing(dream3d_file, spacing_units)
         assert len(spacing) == 3
@@ -134,13 +167,15 @@ class TestReadDREAM3DSpacing:
         with pytest.raises(FileNotFoundError):
             io.read_dream3d_spacing("non_existent_file.dream3d")
 
-    def test_invalid_spacing_units(self, dream3d_file):
+    def test_invalid_spacing_units(self, tmp_path):
         """Test reading spacing with invalid units."""
+        dream3d_file = create_dream3d_dummy_file(tmp_path)
         with pytest.raises(ValueError):
             io.read_dream3d_spacing(dream3d_file, "invalid_unit")
 
-    def test_spacing_units(self, dream3d_file):
+    def test_spacing_units(self, tmp_path):
         """Test reading spacing with different valid units."""
+        dream3d_file = create_dream3d_dummy_file(tmp_path)
         units_and_expected = {
             "m": 1.5,
             "meter": 1.5,
@@ -166,14 +201,16 @@ class TestReadDREAM3DSpacing:
 class TestExtractDataFromH5:
     """Tests for extract_data_from_h5 function."""
 
-    def test_extract_valid_data(self, dream3d_file):
+    def test_extract_valid_data(self, tmp_path):
         """Test extracting valid data from a DREAM.3D file."""
+        dream3d_file = create_dream3d_dummy_file(tmp_path)
         data = io.extract_data_from_h5(dream3d_file, "FeatureIds")
         assert data is not None
         assert data.ndim == 4
 
-    def test_extract_invalid_data(self, dream3d_file):
+    def test_extract_invalid_data(self, tmp_path):
         """Test extracting invalid data from a DREAM.3D file."""
+        dream3d_file = create_dream3d_dummy_file(tmp_path)
         data = io.extract_data_from_h5(dream3d_file, "InvalidDataName")
         assert data is None
 
@@ -186,14 +223,16 @@ class TestExtractDataFromH5:
 class TestExtractAttributeFromH5:
     """Tests for extract_attribute_from_h5 function."""
 
-    def test_extract_valid_attribute(self, dream3d_file):
+    def test_extract_valid_attribute(self, tmp_path):
         """Test extracting a valid attribute from a DREAM.3D file."""
-        attribute = io.extract_attribute_from_h5(dream3d_file, "Pipeline Version")
+        dream3d_file = create_dream3d_dummy_file(tmp_path)
+        attribute = io.extract_attribute_from_h5(dream3d_file, "TEST")
         assert attribute is not None
         assert isinstance(attribute, np.ndarray)
 
-    def test_extract_invalid_attribute(self, dream3d_file):
+    def test_extract_invalid_attribute(self, tmp_path):
         """Test extracting an invalid attribute from a DREAM.3D file."""
+        dream3d_file = create_dream3d_dummy_file(tmp_path)
         attribute = io.extract_attribute_from_h5(dream3d_file, "InvalidAttributeName")
         assert attribute is None
 
@@ -206,14 +245,16 @@ class TestExtractAttributeFromH5:
 class TestExtractPathFromH5:
     """Tests for extract_path_from_h5 function."""
 
-    def test_extract_valid_path(self, dream3d_file):
+    def test_extract_valid_path(self, tmp_path):
         """Test extracting a valid path from a DREAM.3D file."""
+        dream3d_file = create_dream3d_dummy_file(tmp_path)
         path = io.extract_path_from_h5(dream3d_file, "EulerAngles")
         assert path is not None
         assert isinstance(path, str)
 
-    def test_extract_invalid_path(self, dream3d_file):
+    def test_extract_invalid_path(self, tmp_path):
         """Test extracting an invalid path from a DREAM.3D file."""
+        dream3d_file = create_dream3d_dummy_file(tmp_path)
         path = io.extract_path_from_h5(dream3d_file, "Invalid/Path/Name")
         assert path is None
 
@@ -270,7 +311,7 @@ class TestAddDataToH5:
 
         h5_file_path.unlink()
 
-    def test_add_dataset_invalid_file(self, tmp_path):
+    def test_add_dataset_invalid_file(self):
         """Test adding data to an invalid HDF5 file path."""
         not_a_h5_group = "not_a_h5_group"
         data_to_add = np.random.rand(4, 4, 4, 1).astype(np.float32)
