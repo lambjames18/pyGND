@@ -22,7 +22,7 @@ https://github.com/facebookresearch/pynp3d
 
 import numpy as np
 from tqdm import tqdm
-from src.pygnd.rotations import epsijk
+from pygnd.rotations import epsijk
 from joblib import Parallel, delayed
 
 

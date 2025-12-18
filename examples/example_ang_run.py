@@ -1,20 +1,16 @@
-# GND calculations in a 3D TriBeam dataset
+# GND calculations in a ANG file
 # Author: James Lamb (GND calculations originally from Wyatt Witzen)
-# Designed to read in and write out to DREAM3D files, but can be adapted for other formats
 
 
-import src.pygnd.core as core
+import pygnd
 
 
 #############################################
-# Path to the DREAM3D file
-path = "./demo_data/CoNi.dream3d"
+# Path to the ANG file
+path = "../demo_data/CoNi.ang"
 
 # Name of the DataArray containing the Feature IDs
-ids_name = "FeatureIds"
-
-# Name of the DataArray containing the Euler angles
-euler_name = "EulerAngles"
+grain_ids_path = "../demo_data/CoNi_grain_data.txt"
 
 # Burgers vector magnitude in m
 burgers = 2.48e-10
@@ -40,17 +36,12 @@ progress_bar = True
 
 # How many data points to process in one chunk (decrease if memory issues)
 chunk_size = 1000
-
-# Spacing units, ensures that the spacing is converted to meters correctly
-units = "um"
 #############################################
 
 
-core.calculate_and_save(
-    dream3d_path=path,
-    ids_name=ids_name,
-    euler_name=euler_name,
-    spacing_units=units,
+pygnd.calculate_and_save(
+    ang_path=path,
+    grain_ids_path=grain_ids_path,
     cs=cs,
     burgers=burgers,
     minimization=minimization,

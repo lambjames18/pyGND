@@ -109,11 +109,15 @@ def read_dream3d(
     Returns:
         Tuple[np.ndarray, np.ndarray, np.ndarray]: Euler angles, Feature IDs, spacing.
     """
-    ids = np.squeeze(extract_data_from_h5(path, ids_name))
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"DREAM3D file not found at path: {Path(path).absolute()}")
+
+    ids = extract_data_from_h5(path, ids_name)
     if ids is None:
         raise KeyError(
             f"Could not find a data array with the name '{ids_name}' in the dream3d file."
         )
+    ids = np.squeeze(ids)
 
     eulerangles = extract_data_from_h5(path, euler_name)
     if eulerangles is None:
@@ -127,7 +131,6 @@ def read_dream3d(
 
 
 def read_dream3d_spacing(path: str, spacing_units: str = "microns") -> np.ndarray:
-    # Write docstring for this function
     """
     Reads the spacing information from a DREAM3D file and converts it to meters.
 
@@ -139,6 +142,9 @@ def read_dream3d_spacing(path: str, spacing_units: str = "microns") -> np.ndarra
     Returns:
         np.ndarray: Spacing in meters.
     """
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"DREAM3D file not found at path: {path}")
+
     spacing = extract_data_from_h5(path, "SPACING")
 
     # If the spacing path isn't found, it is likely a dream3dnx file and spacing is an attribute
@@ -150,11 +156,7 @@ def read_dream3d_spacing(path: str, spacing_units: str = "microns") -> np.ndarra
             )
 
     # Convert spacing to meters
-    if (
-        spacing_units == "nm"
-        or spacing_units == "nanometer"
-        or spacing_units == "nanometers"
-    ):
+    if spacing_units == "nm" or spacing_units == "nanometer" or spacing_units == "nanometers":
         spacing *= 1e-9
     elif (
         spacing_units == "um"
@@ -162,14 +164,10 @@ def read_dream3d_spacing(path: str, spacing_units: str = "microns") -> np.ndarra
         or spacing_units == "microns"
         or spacing_units == "micrometer"
         or spacing_units == "micrometers"
-        or "µm"
+        or spacing_units == "µm"
     ):
         spacing *= 1e-6
-    elif (
-        spacing_units == "mm"
-        or spacing_units == "millimeter"
-        or spacing_units == "millimeters"
-    ):
+    elif spacing_units == "mm" or spacing_units == "millimeter" or spacing_units == "millimeters":
         spacing *= 1e-3
     elif spacing_units == "m" or spacing_units == "meter" or spacing_units == "meters":
         pass
@@ -192,6 +190,19 @@ def add_dataset_to_h5(h5group: h5py.Group, name: str, data: np.ndarray) -> h5py.
     Returns:
         h5py.Dataset: The created dataset.
     """
+    # Check that h5group is indeed an h5py.Group
+    if not isinstance(h5group, h5py.Group):
+        raise TypeError("h5group must be an instance of h5py.Group")
+
+    # Check that the data is the same shape as other datasets in the group
+    for key in h5group.keys():
+        if isinstance(h5group[key], h5py.Dataset):
+            if h5group[key].shape[:-1] != data.shape[:-1]:
+                raise ValueError(
+                    f"Data shape {data.shape} does not match existing dataset shape {h5group[key].shape} in the group."
+                )
+            break
+
     # Check to see if the dataset already exists, if so just overwrite it
     if name in h5group:
         print(f"Dataset '{name}' already exists in HDF5 group. Overwriting.")
@@ -200,7 +211,7 @@ def add_dataset_to_h5(h5group: h5py.Group, name: str, data: np.ndarray) -> h5py.
 
     dtype = data.dtype.type
     if dtype not in dream3d_dtypes:
-        raise ValueError(f"Unsupported data type for DREAM3D: {dtype}")
+        raise TypeError(f"Unsupported data type for DREAM3D: {dtype}")
     dset = h5group.create_dataset(name, data=data, dtype=dtype)
     dset.attrs["ComponentDimensions"] = np.uint64([data.shape[-1]])
     dset.attrs["Tuple Axis Dimensions"] = np.bytes_(
@@ -214,9 +225,7 @@ def add_dataset_to_h5(h5group: h5py.Group, name: str, data: np.ndarray) -> h5py.
     return dset
 
 
-def add_dataset_to_xdmf(
-    xdmf_path: str | Path, dataset_name: str, data_array: np.ndarray
-) -> None:
+def add_dataset_to_xdmf(xdmf_path: str | Path, dataset_name: str, data_array: np.ndarray) -> None:
     """
     Adds a new dataset to an existing XDMF file. Designed to be used with DREAM3D files.
 
@@ -249,16 +258,12 @@ def add_dataset_to_xdmf(
     )
     data_array_dims = " ".join(map(str, np.array(data_array.shape[0:3]) + 1))
     if dimensions != data_array_dims:
-        raise ValueError(
-            "data_array dimensions are not compatible with XDMF Topology dimensions"
-        )
+        raise ValueError("data_array dimensions are not compatible with XDMF Topology dimensions")
 
     # Make sure an entry with the same name does not already exist, if it does then just return
     for line in xdmf_content:
         if f'Attribute Name="{dataset_name}"' in line:
-            print(
-                f"Dataset '{dataset_name}' already exists in XDMF file. Skipping addition."
-            )
+            print(f"Dataset '{dataset_name}' already exists in XDMF file. Skipping addition.")
             return
 
     # Determine the insertion point (put the new entry at the end of the Grid section)
@@ -269,14 +274,11 @@ def add_dataset_to_xdmf(
     dimensions = " ".join(map(str, data_array.shape))
     attribute_type = (
         "Scalar"
-        if (data_array.ndim == 3)
-        or ((data_array.ndim == 4) and (data_array.shape[-1] == 1))
+        if (data_array.ndim == 3) or ((data_array.ndim == 4) and (data_array.shape[-1] == 1))
         else "Vector"
     )
     file_path = (
-        xdmf_content[[".dream3d:/" in line for line in xdmf_content].index(True)]
-        .strip()
-        .split("/")
+        xdmf_content[[".dream3d:/" in line for line in xdmf_content].index(True)].strip().split("/")
     )
     file_path[-1] = dataset_name
     file_path = "/".join(file_path)
@@ -306,9 +308,7 @@ def add_dataset_to_xdmf(
     return
 
 
-def save_to_dream3d(
-    path: str | Path, ids_name: str, gnd_data: dict, fdm_data: np.ndarray
-) -> bool:
+def save_to_dream3d(path: str | Path, ids_name: str, gnd_data: dict, fdm_data: np.ndarray) -> bool:
     """
     Saves GND and FDM data to a DREAM3D file.
 
@@ -323,13 +323,13 @@ def save_to_dream3d(
     # Get the path to the ids array
     ids_path = extract_path_from_h5(path, ids_name)
     if ids_path is None:
-        raise ValueError(
+        raise KeyError(
             f"Could not find Feature IDs data array with name '{ids_name}' in DREAM3D file. This is required to determine the cell data group."
         )
 
     # Use the ids path to find the cell data group and create paths for new data
     cell_data_path = "/".join(ids_path.split("/")[:-1])
-    xdmf_path = path.replace(".dream3d", ".xdmf")
+    xdmf_path = str(path).replace(".dream3d", ".xdmf")
     modify_xdmf = os.path.exists(xdmf_path)
     if not modify_xdmf:
         print(
@@ -339,7 +339,7 @@ def save_to_dream3d(
     # Prep the data
     data_shape = fdm_data.shape[1:] + (1,)
     for m in gnd_data:
-        gnd_data[m] = gnd_data[m].sum(axis=0).reshape(data_shape)
+        gnd_data[m] = gnd_data[m].sum(axis=0).reshape(data_shape).copy()
     fdm_avg = fdm_data.mean(axis=0).reshape(data_shape)
     fdm_max = fdm_data.max(axis=0).reshape(data_shape)
 
@@ -401,14 +401,23 @@ def extract_attribute_from_h5(h5_file_path: str, attribute_name: str) -> any:
     Returns:
         The value of the attribute, or None if not found.
     """
+    if not os.path.exists(h5_file_path):
+        raise FileNotFoundError(f"HDF5 file not found at path: {h5_file_path}")
+
     with h5py.File(h5_file_path, "r") as h5:
 
         def recursive_search(name, obj):
+            print("Visiting:", name)
             if isinstance(obj, h5py.Group):
+                print(" - attrs:", obj.attrs.keys())
                 if attribute_name in obj.attrs:
                     return obj.attrs[attribute_name]
+            else:
+                return None
+            print(" - Did not find attribute in group")
             for key, item in obj.items():
                 result = recursive_search(f"{name}/{key}", item)
+                print(" - Result from", key, ":", result)
                 if result is not None:
                     return result
             return None
@@ -427,6 +436,9 @@ def extract_data_from_h5(h5_file_path: str, target_name: str) -> np.ndarray:
     Returns:
         np.ndarray: The extracted data array, or None if not found.
     """
+    if not os.path.exists(h5_file_path):
+        raise FileNotFoundError(f"HDF5 file not found at path: {h5_file_path}")
+
     with h5py.File(h5_file_path, "r") as h5:
 
         def recursive_search(name, obj):
@@ -445,9 +457,7 @@ def extract_data_from_h5(h5_file_path: str, target_name: str) -> np.ndarray:
     return data_array
 
 
-def save_npz(
-    gnd_data: dict[np.ndarray], fdm_data: np.ndarray, folder: str | Path
-) -> None:
+def save_npz(gnd_data: dict[np.ndarray], fdm_data: np.ndarray, folder: str | Path) -> None:
     """
     Saves GND and FDM data arrays to a .npz file.
 
@@ -482,9 +492,7 @@ def remove_npz(folder: str | Path) -> None:
         Path(folder).joinpath("gnd_l2.npy").unlink()
 
 
-def generate_images(
-    gnd_data: dict[np.ndarray], fdm_data: np.ndarray, folder: str | Path
-) -> None:
+def generate_images(gnd_data: dict[np.ndarray], fdm_data: np.ndarray, folder: str | Path) -> None:
     """
     Generates and saves images of GND and FDM data arrays as .npy files.
 

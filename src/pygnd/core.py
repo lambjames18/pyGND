@@ -7,10 +7,8 @@ from tqdm import tqdm
 from scipy import optimize
 from joblib import Parallel, delayed
 
-import src.pygnd.io as io
-import src.pygnd.rotations as rotations
-from src.pygnd.utils import tqdm_joblib
-import src.pygnd.quaternions as quaternions
+from pygnd import io, rotations, quaternions
+from pygnd.utils import tqdm_joblib
 
 
 warnings.filterwarnings("ignore", category=UserWarning)
