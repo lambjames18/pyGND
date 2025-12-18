@@ -16,9 +16,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 PRECISION = np.float32
 
 
-def get_linear_operator(
-    cs: int, slip_systems: str = "all"
-) -> tuple[np.ndarray, np.ndarray]:
+def get_linear_operator(cs: int, slip_systems: str = "all") -> tuple[np.ndarray, np.ndarray]:
     """Pre-calculate the A matrix for the given crystal structure and desired slip systems.
 
     Args:
@@ -46,8 +44,14 @@ def get_linear_operator(
         "screw+112",
         "screw+123",
         "screw+110+112",
+        "screw+110+123",
+        "screw+112+123",
         "basal",
+        "prismatic",
+        "pyramidal",
         "basal+prismatic",
+        "basal+pyramidal",
+        "prismatic+pyramidal",
     ]:
         raise ValueError(
             "Slip systems must be 'all', 'screw+110', 'screw+112', 'screw+123', 'screw+110+112', 'basal', 'basal+prismatic', depending on the crystam structure."
@@ -305,17 +309,11 @@ def get_completeness(grain_ids: np.ndarray) -> np.ndarray:
     z_trans = np.ones(shape, dtype=bool)
 
     if shape[0] > 1:
-        x_trans = np.pad(
-            grain_ids[:-1, ...] != grain_ids[1:, ...], ((0, 1), (0, 0), (0, 0))
-        )
+        x_trans = np.pad(grain_ids[:-1, ...] != grain_ids[1:, ...], ((0, 1), (0, 0), (0, 0)))
     if shape[1] > 1:
-        y_trans = np.pad(
-            grain_ids[:, :-1, :] != grain_ids[:, 1:, :], ((0, 0), (0, 1), (0, 0))
-        )
+        y_trans = np.pad(grain_ids[:, :-1, :] != grain_ids[:, 1:, :], ((0, 0), (0, 1), (0, 0)))
     if shape[2] > 1:
-        z_trans = np.pad(
-            grain_ids[..., :-1] != grain_ids[..., 1:], ((0, 0), (0, 0), (0, 1))
-        )
+        z_trans = np.pad(grain_ids[..., :-1] != grain_ids[..., 1:], ((0, 0), (0, 0), (0, 1)))
 
     # Interior points
     interior_mask = np.zeros_like(grain_ids, dtype=bool)
@@ -517,9 +515,9 @@ def get_orientation_gradients(
     laue_id = 11 if cs == 1 or cs == 2 else 9
 
     if n_cpus == 1:
-        quats_disorientation = quaternions.qu_disorientation(
-            q0, q1, laue_id, laue_id
-        ).transpose(1, 0, 2)
+        quats_disorientation = quaternions.qu_disorientation(q0, q1, laue_id, laue_id).transpose(
+            1, 0, 2
+        )
     else:
         # Setup chunk size
         if chunk_size is None:
@@ -578,9 +576,7 @@ def get_orientation_gradients(
     return gradient_tensors, misorientation
 
 
-def _minimize_l2(
-    Lambda: np.ndarray, B: np.ndarray, chunk_size: int = None
-) -> np.ndarray:
+def _minimize_l2(Lambda: np.ndarray, B: np.ndarray, chunk_size: int = None) -> np.ndarray:
     """Perform the minimization using the L2 norm.
     Negative densities indicate left handed dislocations, positive densities indicate right handed dislocations.
 
@@ -603,9 +599,7 @@ def _minimize_l2(
     return dd
 
 
-def _minimize_l1_right_only(
-    Lambda: np.ndarray, A: np.ndarray, tol: float = 1e-4
-) -> np.ndarray:
+def _minimize_l1_right_only(Lambda: np.ndarray, A: np.ndarray, tol: float = 1e-4) -> np.ndarray:
     """Perform the minimization using the L1 norm with proper equality constraints.
     This function usses a compact basis (same as L2 minimization).
     In the case of L1, this means that only right handed dislocations are allowed
@@ -663,9 +657,7 @@ def _minimize_l1_right_only(
         A_ub = np.vstack(
             [
                 np.hstack([I, -I]),  # rho_i - t_i <= 0  (i.e., rho_i <= t_i)
-                np.hstack(
-                    [-I, -I]
-                ),  # -rho_i - t_i <= 0 (i.e., -rho_i <= t_i, or rho_i >= -t_i)
+                np.hstack([-I, -I]),  # -rho_i - t_i <= 0 (i.e., -rho_i <= t_i, or rho_i >= -t_i)
             ]
         )
         b_ub = np.zeros(2 * n_slip_systems, dtype=np.float64)
@@ -844,17 +836,13 @@ def minimize(
 
         # Process chunks in parallel
         with Parallel(n_jobs=n_cpus, timeout=9999999) as parallel:
-            chunk_results = parallel(
-                delayed(_minimize_l1)(chunk, A) for chunk in chunks
-            )
+            chunk_results = parallel(delayed(_minimize_l1)(chunk, A) for chunk in chunks)
 
         # Combine the results
         dd = np.hstack(chunk_results).reshape(out_shape)
 
     else:
-        raise ValueError(
-            "Minimization scheme not recognized. Please choose either 'l1' or 'l2'"
-        )
+        raise ValueError("Minimization scheme not recognized. Please choose either 'l1' or 'l2'")
 
     # Divide by Burgers vector correctly based on crystal structure and slip systems
     if cs == 1 or cs == 2:
@@ -947,13 +935,9 @@ def calculate(
     if ids.shape != euler.shape[:-1]:
         raise ValueError("The grain IDs must have the same shape as the Euler angles")
     if cs not in (1, 2, 3):
-        raise ValueError(
-            "The crystal structure must be 1 for FCC, 2 for BCC, or 3 for HCP"
-        )
+        raise ValueError("The crystal structure must be 1 for FCC, 2 for BCC, or 3 for HCP")
     if len(spacing) != ndim:
-        raise ValueError(
-            "The spacing must have the same number of dimensions as the Euler angles"
-        )
+        raise ValueError("The spacing must have the same number of dimensions as the Euler angles")
 
     euler = euler.astype(PRECISION)
 
@@ -1008,9 +992,7 @@ def calculate(
     # Minimize the dislocation density
     dd = {}
     for m in minimization:
-        dd[m] = np.abs(
-            minimize(alpha, cs, A, B, burgers, m, n_cpus, progress_bar=progress_bar)
-        )
+        dd[m] = np.abs(minimize(alpha, cs, A, B, burgers, m, n_cpus, progress_bar=progress_bar))
 
     return dd, mis
 
@@ -1071,9 +1053,7 @@ def calculate_and_save(
     if dream3d_path is not None:
         path = dream3d_path
         folder = Path(dream3d_path).parent
-        euler, ids, spacing = io.read_dream3d(
-            dream3d_path, ids_name, euler_name, spacing_units
-        )
+        euler, ids, spacing = io.read_dream3d(dream3d_path, ids_name, euler_name, spacing_units)
     elif ang_path is not None:
         folder = Path(ang_path).parent
         euler, ids, spacing = io.read_ang(ang_path, grain_ids_path)
@@ -1112,9 +1092,7 @@ def calculate_and_save(
         if not result:
             # Save temporary .npy files in case DREAM3D saving fails
             io.save_npz(dd, mis, folder)
-            print(
-                "Failed to save results to DREAM3D file. See .npy files for raw data."
-            )
+            print("Failed to save results to DREAM3D file. See .npy files for raw data.")
             return False
         else:
             print(f"Results saved to DREAM3D file: {Path(path).absolute()}")

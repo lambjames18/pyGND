@@ -232,9 +232,7 @@ def qu_norm_std(qu: np.ndarray) -> np.ndarray:
     return qu_std(qu_norm(qu))
 
 
-def quaternion_rotate_sets_sphere(
-    points_start: np.ndarray, points_finish
-) -> np.ndarray:
+def quaternion_rotate_sets_sphere(points_start: np.ndarray, points_finish) -> np.ndarray:
     """
     Determine the quaternions that rotate the points_start to the points_finish.
     All points are assumed to be on the unit sphere. The cross product is used
@@ -281,8 +279,8 @@ def qu_angle(qu: np.ndarray) -> np.ndarray:
     Returns:
         array of shape (..., ) of rotation angles.
     """
-    with np.errstate(divide="ignore", invalid="ignore"):
-        return 2 * np.arccos(qu[..., 0])
+    out = np.where(np.isclose(qu[..., 0], 1.0), 0.0, 2 * np.arccos(qu[..., 0]))
+    return out
 
 
 def qu_axis(qu: np.ndarray) -> np.ndarray:
@@ -337,9 +335,7 @@ def qu_log(q: np.ndarray, tol=1e-6) -> np.ndarray:
     # Use the angle to get the rotation vector
     norm_v = np.linalg.norm(v, axis=-1)
     with np.errstate(divide="ignore", invalid="ignore"):
-        qlog = v * np.where(norm_v > tol, theta / norm_v, 0).reshape(
-            q.shape[:-1] + (1,)
-        )
+        qlog = v * np.where(norm_v > tol, theta / norm_v, 0).reshape(q.shape[:-1] + (1,))
     return qlog
 
 
@@ -360,6 +356,19 @@ def symmetrize(q: np.ndarray, laue_id: int) -> np.ndarray:
     else:
         q_sym = qu_prod(S[None], q[:, None]).reshape(q.shape[0], -1, 4)
     return q_sym
+
+
+def qu_misorientation(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
+    """Calculates the misorientation quaternion between two quaternions.
+
+    Args:
+        q1: shape (..., 4) quaternions
+        q2: shape (..., 4) quaternions
+
+    Returns:
+        The misorientation quaternion, a np.ndarray of shape (..., 4)
+    """
+    return qu_prod(q1, qu_conj(q2))
 
 
 def qu_disorientation(
@@ -422,9 +431,7 @@ def qu_disorientation(
     # broadcasting is done so that the output is of shape (N, |laue_group_2|, |laue_group_1|, 4)
     equivalent_quaternions = qu_prod_raw(
         laue_group_2.reshape(1, -1, 1, 4),
-        qu_prod_raw(
-            misori_quats.reshape(N, 1, 1, 4), laue_group_1.reshape(1, 1, -1, 4)
-        ),
+        qu_prod_raw(misori_quats.reshape(N, 1, 1, 4), laue_group_1.reshape(1, 1, -1, 4)),
     )
 
     # flatten along the laue group dimensions
@@ -461,9 +468,7 @@ def qu_disorientation(
             axes = qu_axis(out_equivalent)
             angles[axes[..., 2] < 0] *= -1
             axes[axes[..., 2] < 0] *= -1
-            mask1 = (
-                (axes[..., 0] >= 0) & (axes[..., 1] >= 0) & (axes[..., 2] >= 0)
-            )  # all positive
+            mask1 = (axes[..., 0] >= 0) & (axes[..., 1] >= 0) & (axes[..., 2] >= 0)  # all positive
             mask2 = (axes[..., 2] >= axes[..., 1]) & (
                 axes[..., 1] >= axes[..., 0]
             )  # ascending order
@@ -479,9 +484,7 @@ def qu_disorientation(
                 print(out_equivalent[mask3])
                 print(axes[mask3])
                 print(angles[mask3])
-                raise ValueError(
-                    "No equivalent quaternion found in the fundamental sector"
-                )
+                raise ValueError("No equivalent quaternion found in the fundamental sector")
             output[i] = out_equivalent[mask3][0]
 
     return qu_norm_std(output.reshape(data_shape))
@@ -645,16 +648,11 @@ def get_Q_tensor(q_dis, chunk_size=None) -> np.ndarray:
         # )
         # Q = np.sum(Q_s, axis=0) / q_dis.shape[0]
     else:
-        Q = (
-            np.multiply.outer(q_dis[..., 1:], q_dis[..., 1:]).sum(axis=(0, 2))
-            / q_dis.shape[0]
-        )
+        Q = np.multiply.outer(q_dis[..., 1:], q_dis[..., 1:]).sum(axis=(0, 2)) / q_dis.shape[0]
     return Q
 
 
-def get_sign_carrying_disorientation_angle(
-    q_dis, chunk_size=None, r_star=None
-) -> np.ndarray:
+def get_sign_carrying_disorientation_angle(q_dis, chunk_size=None, r_star=None) -> np.ndarray:
     """Calculate the sign carrying disorientation angle from a set of disorientation quaternions.
     As opposed to the disorientation angle, the sign carrying disorientation angle is maintains
     the direction around the rotation axis, using a global preferred rotation axis.
@@ -672,9 +670,7 @@ def get_sign_carrying_disorientation_angle(
         r_star = get_preferred_rotation_axis(q_dis, chunk_size=chunk_size)
     with np.errstate(divide="ignore", invalid="ignore"):
         angles = (
-            np.arccos(q_dis[..., 0])
-            / np.sqrt(1 - q_dis[..., 0] ** 2)
-            * q_dis[..., 1:].dot(r_star)
+            np.arccos(q_dis[..., 0]) / np.sqrt(1 - q_dis[..., 0] ** 2) * q_dis[..., 1:].dot(r_star)
         )
     angles[np.isnan(angles)] = 0
     angles[np.isinf(angles)] = 0

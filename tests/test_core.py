@@ -17,10 +17,6 @@ class TestGetLinearOperator:
         assert A.shape[1] == 18  # 18 slip systems for FCC
         assert B.shape == (18, 9)
 
-        # Check that B is pseudo-inverse of A: B @ A should be close to identity
-        product = B @ A
-        np.testing.assert_allclose(product, np.eye(18), atol=1e-5)
-
     def test_bcc_structure_all_slip_systems(self):
         """Test that BCC crystal structure with all slip systems works."""
         A, B = core.get_linear_operator(cs=2, slip_systems="all")
@@ -54,6 +50,27 @@ class TestGetLinearOperator:
         assert A.shape[0] == 9
         assert A.shape[1] == 28  # 4 screw + 24 edge on {123}
 
+    def test_bcc_structure_screw_110_112(self):
+        """Test BCC with screw+110+112 slip systems."""
+        A, B = core.get_linear_operator(cs=2, slip_systems="screw+110+112")
+
+        assert A.shape[0] == 9
+        assert A.shape[1] == 28
+
+    def test_bcc_structure_screw_110_123(self):
+        """Test BCC with screw+110+123 slip systems."""
+        A, B = core.get_linear_operator(cs=2, slip_systems="screw+110+123")
+
+        assert A.shape[0] == 9
+        assert A.shape[1] == 40
+
+    def test_bcc_structure_screw_112_123(self):
+        """Test BCC with screw+112+123 slip systems."""
+        A, B = core.get_linear_operator(cs=2, slip_systems="screw+112+123")
+
+        assert A.shape[0] == 9
+        assert A.shape[1] == 40  # 8 screw + 36 edge on {112} and {123}
+
     def test_hcp_structure_all_slip_systems(self):
         """Test that HCP crystal structure with all slip systems works."""
         A, B = core.get_linear_operator(cs=3, slip_systems="all")
@@ -77,8 +94,16 @@ class TestGetLinearOperator:
         A, B = core.get_linear_operator(cs=3, slip_systems="prismatic")
 
         assert A.shape[0] == 9
-        assert A.shape[1] == 3  # 3 edge prismatic
+        assert A.shape[1] == 3  # 3 edge
         assert B.shape == (3, 9)
+
+    def test_hcp_structure_pyramidal(self):
+        """Test HCP with pyramidal slip systems."""
+        A, B = core.get_linear_operator(cs=3, slip_systems="pyramidal")
+
+        assert A.shape[0] == 9
+        assert A.shape[1] == 24  # 12 edge + 12 screw pyramidal
+        assert B.shape == (24, 9)
 
     def test_hcp_structure_basal_prismatic(self):
         """Test HCP with basal+prismatic slip systems."""
@@ -87,6 +112,22 @@ class TestGetLinearOperator:
         assert A.shape[0] == 9
         assert A.shape[1] == 9
         assert B.shape == (9, 9)
+
+    def test_hcp_structure_basal_pyramidal(self):
+        """Test HCP with basal+pyramidal slip systems."""
+        A, B = core.get_linear_operator(cs=3, slip_systems="basal+pyramidal")
+
+        assert A.shape[0] == 9
+        assert A.shape[1] == 30
+        assert B.shape == (30, 9)
+
+    def test_hcp_structure_prismatic_pyramidal(self):
+        """Test HCP with prismatic+pyramidal slip systems."""
+        A, B = core.get_linear_operator(cs=3, slip_systems="prismatic+pyramidal")
+
+        assert A.shape[0] == 9
+        assert A.shape[1] == 27
+        assert B.shape == (27, 9)
 
     def test_invalid_crystal_structure_type(self):
         """Test that non-integer crystal structure raises ValueError."""
@@ -132,25 +173,57 @@ class TestGetLinearOperator:
         assert A.dtype == np.float32
         assert B.dtype == np.float32
 
-    def test_b_times_a_near_identity(self):
-        """Test that B @ A is close to identity for all crystal structures."""
+    def test_a_times_b_near_identity(self):
+        """Test that A @ B is close to identity for full-rank underdetermined systems.
+
+        For underdetermined systems (m < n) with full rank, A @ B ≈ I_m should hold.
+        For rank-deficient systems, we test the Moore-Penrose property A @ B @ A ≈ A instead.
+        """
         structures = [
             (1, "all"),
             (2, "all"),
             (2, "screw+110"),
+            (2, "screw+112"),
+            (2, "screw+123"),
+            (2, "screw+110+112"),
+            (2, "screw+110+123"),
+            (2, "screw+112+123"),
             (3, "all"),
             (3, "basal"),
+            (3, "prismatic"),
+            (3, "pyramidal"),
+            (3, "basal+prismatic"),
+            (3, "basal+pyramidal"),
+            (3, "prismatic+pyramidal"),
         ]
 
+        fail_count = 0
         for cs, slip_sys in structures:
             A, B = core.get_linear_operator(cs=cs, slip_systems=slip_sys)
-            product = B @ A
-            identity = np.eye(A.shape[1])
+            m, n = A.shape
+            rank = np.linalg.matrix_rank(A)
 
-            # Check that B @ A is close to identity
-            np.testing.assert_allclose(
-                product, identity, atol=1e-4, err_msg=f"Failed for cs={cs}, slip_systems={slip_sys}"
-            )
+            # For full-rank underdetermined systems, test A @ B ≈ I
+            if rank == m and m < n:
+                product = A @ B
+                error = np.linalg.norm(product - np.eye(m), ord="fro")
+                if error >= 1e-6:
+                    print(
+                        f"Failed A @ B ≈ I check for cs={cs}, slip_systems={slip_sys}: {error}"
+                    )
+                    fail_count += 1
+
+            # For rank-deficient systems, test the Moore-Penrose property: A @ B @ A ≈ A
+            else:
+                product = A @ B @ A
+                error = np.linalg.norm(product - A, ord="fro") / np.linalg.norm(A, ord="fro")
+                if error >= 1e-6:
+                    print(
+                        f"Failed A @ B @ A ≈ A check for cs={cs}, slip_systems={slip_sys}: {error}"
+                    )
+                    fail_count += 1
+
+        assert fail_count == 0, "Some pseudo-inverse property checks failed."
 
 
 class TestPrecisionConstant:
