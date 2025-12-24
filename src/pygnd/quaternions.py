@@ -26,6 +26,9 @@ from pygnd.rotations import epsijk
 from joblib import Parallel, delayed
 
 
+# Basic operations
+
+
 def qu_std(qu: np.ndarray) -> np.ndarray:
     """
     Standardize unit quaternion to have non-negative real part.
@@ -54,7 +57,64 @@ def qu_norm(qu: np.ndarray) -> np.ndarray:
         return np.where(norms > 0, qu / norms, 0)
 
 
-# Modified for P factor
+def qu_norm_std(qu: np.ndarray) -> np.ndarray:
+    """
+    Normalize a quaternion to unit norm and make real part non-negative.
+
+    Args:
+        qu: shape (..., 4) quaternions in form (w, x, y, z)
+
+    Returns:
+        np.ndarray of normalized and standardized quaternions.
+    """
+    return qu_std(qu_norm(qu))
+
+
+def qu_conj(qu: np.ndarray) -> np.ndarray:
+    """
+    Get the unit quaternions for the inverse action.
+
+    Args:
+        qu: shape (..., 4) quaternions in form (w, x, y, z)
+
+    Returns:
+        The inverse, a array of quaternions of shape (..., 4).
+    """
+    scaling = np.array([1, -1, -1, -1], dtype=qu.dtype)
+    return qu * scaling
+
+
+def qu_angle(qu: np.ndarray) -> np.ndarray:
+    """
+    Compute angles of rotation for quaternions.
+
+    Args:
+        qu: shape (..., 4) quaternions in form (w, x, y, z)
+
+    Returns:
+        array of shape (..., ) of rotation angles.
+    """
+    out = np.where(np.isclose(qu[..., 0], 1.0), 0.0, 2 * np.arccos(qu[..., 0]))
+    return out
+
+
+def qu_axis(qu: np.ndarray) -> np.ndarray:
+    """
+    Compute the axis of rotation for quaternions.
+
+    Args:
+        qu: shape (..., 4) quaternions in form (w, x, y, z)
+
+    Returns:
+        array of shape (..., 3) of rotation axes.
+    """
+    mag = np.linalg.norm(qu[..., 1:], axis=-1, keepdims=True)
+    return np.where(np.isclose(mag, 0.0), [0.0, 0.0, 1.0], qu[..., 1:] / mag)
+
+
+# Multiplication operations
+
+
 def qu_prod_raw(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     """
     Multiply two quaternions.
@@ -95,26 +155,24 @@ def qu_prod(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return qu_std(ab)
 
 
-def qu_slerp(a: np.ndarray, b: np.ndarray, t: float) -> np.ndarray:
+def qu_prod_axis(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     """
-    Spherical linear interpolation between two quaternions.
+    Return the axis of the quaternion product.
 
     Args:
         a: shape (..., 4) quaternions in form (w, x, y, z)
         b: shape (..., 4) quaternions in form (w, x, y, z)
-        t: interpolation parameter between 0 and 1
 
     Returns:
-        The interpolated quaternions, a array of shape (..., 4).
+        a*b np.ndarray shape (..., 3) of quaternion product axes.
     """
-    a = qu_norm(a)
-    b = qu_norm(b)
-    cos_theta = np.sum(a * b, axis=-1)
-    angle = np.acos(cos_theta)
-    sin_theta = np.sin(angle)
-    w1 = np.sin((1 - t) * angle) / sin_theta
-    w2 = np.sin(t * angle) / sin_theta
-    return (a.unsqueeze(-1) * w1 + b.unsqueeze(-1) * w2).squeeze(-1)
+    aw, ax, ay, az = a[..., 0], a[..., 1], a[..., 2], a[..., 3]
+    bw, bx, by, bz = b[..., 0], b[..., 1], b[..., 2], b[..., 3]
+    ox = aw * bx + ax * bw + epsijk * ay * bz - epsijk * az * by
+    oy = aw * by - epsijk * ax * bz + ay * bw + epsijk * az * bx
+    oz = aw * bz + epsijk * ax * by - epsijk * ay * bx + az * bw
+
+    return np.stack((ox, oy, oz), -1)
 
 
 def qu_prod_pos_real(a: np.ndarray, b: np.ndarray) -> np.ndarray:
@@ -149,213 +207,7 @@ def qu_triple_prod_pos_real(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> np.n
     return qu_prod_pos_real(a, qu_prod(b, c))
 
 
-# Modified for P factor
-def qu_prod_axis(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """
-    Return the axis of the quaternion product.
-
-    Args:
-        a: shape (..., 4) quaternions in form (w, x, y, z)
-        b: shape (..., 4) quaternions in form (w, x, y, z)
-
-    Returns:
-        a*b np.ndarray shape (..., 3) of quaternion product axes.
-    """
-    aw, ax, ay, az = a[..., 0], a[..., 1], a[..., 2], a[..., 3]
-    bw, bx, by, bz = b[..., 0], b[..., 1], b[..., 2], b[..., 3]
-    ox = aw * bx + ax * bw + epsijk * ay * bz - epsijk * az * by
-    oy = aw * by - epsijk * ax * bz + ay * bw + epsijk * az * bx
-    oz = aw * bz + epsijk * ax * by - epsijk * ay * bx + az * bw
-
-    # Without the P factor
-    # ox = aw * bx + ax * bw + ay * bz - az * by
-    # oy = aw * by - ax * bz + ay * bw + az * bx
-    # oz = aw * bz + ax * by - ay * bx + az * bw
-    return np.stack((ox, oy, oz), -1)
-
-
-def qu_conj(qu: np.ndarray) -> np.ndarray:
-    """
-    Get the unit quaternions for the inverse action.
-
-    Args:
-        qu: shape (..., 4) quaternions in form (w, x, y, z)
-
-    Returns:
-        The inverse, a array of quaternions of shape (..., 4).
-    """
-    scaling = np.array([1, -1, -1, -1], dtype=qu.dtype)
-    return qu * scaling
-
-
-# Modified for P factor
-def qu_apply(qu: np.ndarray, point: np.ndarray) -> np.ndarray:
-    """
-    Rotate 3D points by unit quaternions.
-
-    Args:
-        qu: shape (..., 4) of quaternions in the form (w, x, y, z)
-        point: shape (..., 3) of 3D points.
-
-    Returns:
-        np.ndarray of rotated points of shape (..., 3).
-    """
-    aw, ax, ay, az = qu[..., 0], qu[..., 1], qu[..., 2], qu[..., 3]
-    bx, by, bz = point[..., 0], point[..., 1], point[..., 2]
-
-    # need qu_prod_axis(qu_prod_raw(qu, point_as_quaternion), qu_conj(qu))
-    # do qu_prod_raw(qu, point_as_quaternion) first to get intermediate values
-    iw = ax * bx - ay * by - az * bz
-    ix = aw * bx + epsijk * ay * bz - epsijk * az * by
-    iy = aw * by - epsijk * ax * bz + epsijk * az * bx
-    iz = aw * bz + epsijk * ax * by - epsijk * ay * bx
-    qu_i = np.stack((iw, ix, iy, iz), -1)
-
-    # next qu_prod_axis(qu_prod_raw(qu, point_as_quaternion), qu_conj(qu))
-    ox = -iw * ax + ix * aw - epsijk * iy * az + epsijk * iz * ay
-    oy = -iw * ay + epsijk * ix * az + iy * aw - epsijk * iz * ax
-    oz = -iw * az - epsijk * ix * ay + epsijk * iy * ax + iz * aw
-
-    return np.stack((ox, oy, oz), -1)
-
-
-def qu_norm_std(qu: np.ndarray) -> np.ndarray:
-    """
-    Normalize a quaternion to unit norm and make real part non-negative.
-
-    Args:
-        qu: shape (..., 4) quaternions in form (w, x, y, z)
-
-    Returns:
-        np.ndarray of normalized and standardized quaternions.
-    """
-    return qu_std(qu_norm(qu))
-
-
-def quaternion_rotate_sets_sphere(points_start: np.ndarray, points_finish) -> np.ndarray:
-    """
-    Determine the quaternions that rotate the points_start to the points_finish.
-    All points are assumed to be on the unit sphere. The cross product is used
-    as the axis of rotation, but there are an infinite number of quaternions that
-    fulfill the requirement as the points can be rotated around their axis by
-    an arbitrary angle, and they will still have the same latitude and longitude.
-
-    Args:
-        points_start: Starting points as array of shape (..., 3).
-        points_finish: Ending points as array of shape (..., 3).
-
-    Returns:
-        The quaternions, as array of shape (..., 4).
-
-    """
-    # determine mask for numerical stability
-    valid = np.abs(np.sum(points_start * points_finish, axis=-1)) < 0.999999
-    # get the cross product of the two sets of points
-    cross = np.cross(points_start[valid], points_finish[valid], axis=-1)
-    # get the dot product of the two sets of points
-    dot = np.sum(points_start[valid] * points_finish[valid], axis=-1)
-    # get the angle
-    angle = np.atan2(np.linalg.norm(cross, axis=-1), dot)
-    # add tau to the angle if the cross product is negative
-    angle[angle < 0] += 2 * np.pi
-    # set the output
-    out = np.zeros((points_start.shape[0], 4), dtype=points_start.dtype)
-    out[valid, 0] = np.cos(angle / 2)
-    out[valid, 1:] = np.sin(angle / 2).unsqueeze(-1) * (
-        cross / np.linalg.norm(cross, axis=-1, keepdims=True)
-    )
-    out[~valid, 0] = 1
-    out[~valid, 1:] = 0
-    return out
-
-
-def qu_angle(qu: np.ndarray) -> np.ndarray:
-    """
-    Compute angles of rotation for quaternions.
-
-    Args:
-        qu: shape (..., 4) quaternions in form (w, x, y, z)
-
-    Returns:
-        array of shape (..., ) of rotation angles.
-    """
-    out = np.where(np.isclose(qu[..., 0], 1.0), 0.0, 2 * np.arccos(qu[..., 0]))
-    return out
-
-
-def qu_axis(qu: np.ndarray) -> np.ndarray:
-    """
-    Compute the axis of rotation for quaternions.
-
-    Args:
-        qu: shape (..., 4) quaternions in form (w, x, y, z)
-
-    Returns:
-        array of shape (..., 3) of rotation axes.
-    """
-    with np.errstate(divide="ignore", invalid="ignore"):
-        return qu[..., 1:] / np.linalg.norm(qu[..., 1:], axis=-1, keepdims=True)
-
-
-def qu_avg(q: np.ndarray, laue_id, chunk_size=None) -> np.ndarray:
-    """Calculates the average quaternion from a set of quaternions.
-
-    Args:
-        q: shape (N, 4) quaternions
-        laue_id: integer between inclusive [1, 11]
-
-    Returns:
-        The average quaternion, a np.ndarray of shape (4,)
-    """
-    S = laue_elements(laue_id)
-    q = qu_norm_std(q)
-    q0, qn = q[0], q[1:]
-    if chunk_size is not None:
-        chunk_size = min(chunk_size, qn.shape[0])
-        idx = np.random.choice(qn.shape[0], size=chunk_size, replace=False)
-        qn = qn[idx]
-    qn_sym = qu_prod(S[None], qn[:, None])
-    dots = np.abs(q0.dot(qn_sym.transpose(0, 2, 1)))
-    idx = dots.argmax(axis=1)
-    qn_close = qn_sym[np.arange(qn_sym.shape[0]), idx]
-    return qn_close.mean(axis=0)
-
-
-def qu_log(q: np.ndarray, tol=1e-6) -> np.ndarray:
-    """Logarithm of a quaternion.
-    log(q) = [0, theta*n] where q = [cos(theta), sin(theta)*n]
-    quaternion should be scalar first, vector second.
-    """
-    # Make sure the quaternion is a unit quaternion
-    q = qu_norm_std(q)
-    # Separate into scalar and vector components
-    s, v = q[..., 0], q[..., 1:]
-    # Get the angle
-    theta = np.arccos(s)
-    # Use the angle to get the rotation vector
-    norm_v = np.linalg.norm(v, axis=-1)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        qlog = v * np.where(norm_v > tol, theta / norm_v, 0).reshape(q.shape[:-1] + (1,))
-    return qlog
-
-
-def symmetrize(q: np.ndarray, laue_id: int) -> np.ndarray:
-    """Symmetrizes a quaternion using the Laue group.
-
-    Args:
-        q: shape (N, 4) quaternions
-        laue_id: integer between inclusive [1, 11]
-
-    Returns:
-        The symmetrized quaternions, a np.ndarray of shape (N, |Laue group|, 4)
-    """
-    S = laue_elements(laue_id)
-    q = qu_norm_std(q)
-    if q.shape == (4,):
-        q_sym = qu_prod(S, q)
-    else:
-        q_sym = qu_prod(S[None], q[:, None]).reshape(q.shape[0], -1, 4)
-    return q_sym
+# Misorientations
 
 
 def qu_misorientation(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
@@ -548,6 +400,132 @@ def qu_disorientation_directional(quats1: np.ndarray, quats2: np.ndarray, laue_i
     return qu_std(disori_quats.reshape(data_shape))
 
 
+# Advanced / Unique operations
+
+
+def qu_slerp(a: np.ndarray, b: np.ndarray, t: float) -> np.ndarray:
+    """
+    Spherical linear interpolation between two quaternions.
+
+    Args:
+        a: shape (..., 4) quaternions in form (w, x, y, z)
+        b: shape (..., 4) quaternions in form (w, x, y, z)
+        t: interpolation parameter between 0 and 1
+
+    Returns:
+        The interpolated quaternions, a array of shape (..., 4).
+    """
+    a = qu_norm(a)
+    b = qu_norm(b)
+    cos_theta = np.sum(a * b, axis=-1)
+    angle = np.acos(cos_theta)
+    sin_theta = np.sin(angle)
+    w1 = np.sin((1 - t) * angle) / sin_theta
+    w2 = np.sin(t * angle) / sin_theta
+    return (a.unsqueeze(-1) * w1 + b.unsqueeze(-1) * w2).squeeze(-1)
+
+
+def qu_log(q: np.ndarray, tol=1e-6) -> np.ndarray:
+    """Logarithm of a quaternion.
+    log(q) = [0, theta*n] where q = [cos(theta), sin(theta)*n]
+    quaternion should be scalar first, vector second.
+    """
+    # Make sure the quaternion is a unit quaternion
+    q = qu_norm_std(q)
+    # Separate into scalar and vector components
+    s, v = q[..., 0], q[..., 1:]
+    # Get the angle
+    theta = np.arccos(s)
+    # Use the angle to get the rotation vector
+    norm_v = np.linalg.norm(v, axis=-1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        qlog = v * np.where(norm_v > tol, theta / norm_v, 0).reshape(q.shape[:-1] + (1,))
+    return qlog
+
+
+def qu_avg(q: np.ndarray, laue_id, chunk_size=None) -> np.ndarray:
+    """Calculates the average quaternion from a set of quaternions.
+
+    Args:
+        q: shape (N, 4) quaternions
+        laue_id: integer between inclusive [1, 11]
+
+    Returns:
+        The average quaternion, a np.ndarray of shape (4,)
+    """
+    S = laue_elements(laue_id)
+    q = qu_norm_std(q)
+    q0, qn = q[0], q[1:]
+    if chunk_size is not None:
+        chunk_size = min(chunk_size, qn.shape[0])
+        idx = np.random.choice(qn.shape[0], size=chunk_size, replace=False)
+        qn = qn[idx]
+    qn_sym = qu_prod(S[None], qn[:, None])
+    dots = np.abs(q0.dot(qn_sym.transpose(0, 2, 1)))
+    idx = dots.argmax(axis=1)
+    qn_close = qn_sym[np.arange(qn_sym.shape[0]), idx]
+    return qn_close.mean(axis=0)
+
+
+# Rotations
+
+
+def qu_apply(qu: np.ndarray, point: np.ndarray) -> np.ndarray:
+    """
+    Rotate 3D points by unit quaternions.
+
+    Args:
+        qu: shape (..., 4) of quaternions in the form (w, x, y, z)
+        point: shape (..., 3) of 3D points.
+
+    Returns:
+        np.ndarray of rotated points of shape (..., 3).
+    """
+    point_as_quaternion = np.concatenate([np.zeros_like(point[..., :1]), point], axis=-1)
+    qu_i = qu_prod_raw(qu, point_as_quaternion)
+    qu_o = qu_prod_raw(qu_i, qu_conj(qu))
+    v_out = qu_o[..., 1:]  # Extract the vector part
+
+    return v_out
+
+
+def qu_rotate_sets_sphere(points_start: np.ndarray, points_finish) -> np.ndarray:
+    """
+    Determine the quaternions that rotate the points_start to the points_finish.
+    All points are assumed to be on the unit sphere. The cross product is used
+    as the axis of rotation, but there are an infinite number of quaternions that
+    fulfill the requirement as the points can be rotated around their axis by
+    an arbitrary angle, and they will still have the same latitude and longitude.
+
+    Args:
+        points_start: Starting points as array of shape (..., 3).
+        points_finish: Ending points as array of shape (..., 3).
+
+    Returns:
+        The quaternions, as array of shape (..., 4).
+
+    """
+    # determine mask for numerical stability
+    valid = np.abs(np.sum(points_start * points_finish, axis=-1)) < 0.999999
+    # get the cross product of the two sets of points
+    cross = np.cross(points_start[valid], points_finish[valid], axis=-1)
+    # get the dot product of the two sets of points
+    dot = np.sum(points_start[valid] * points_finish[valid], axis=-1)
+    # get the angle
+    angle = np.atan2(np.linalg.norm(cross, axis=-1), dot)
+    # add tau to the angle if the cross product is negative
+    angle[angle < 0] += 2 * np.pi
+    # set the output
+    out = np.zeros((points_start.shape[0], 4), dtype=points_start.dtype)
+    out[valid, 0] = np.cos(angle / 2)
+    out[valid, 1:] = np.sin(angle / 2).unsqueeze(-1) * (
+        cross / np.linalg.norm(cross, axis=-1, keepdims=True)
+    )
+    out[~valid, 0] = 1
+    out[~valid, 1:] = 0
+    return out
+
+
 def ori_to_fz_laue(quats: np.ndarray, laue_id: int) -> np.ndarray:
     """
     This function moves the given quaternions to the fundamental zone of the
@@ -638,15 +616,6 @@ def get_Q_tensor(q_dis, chunk_size=None) -> np.ndarray:
             for i in range(len(q_dis_s))
         )
         Q = np.array([q_s.sum(axis=(0, 2)) for q_s in Q_s]).sum(axis=0) / q_dis.shape[0]
-        # Q_s = np.array(
-        # [
-        # np.multiply.outer(q_dis_s[i][..., 1:], q_dis_s[i][..., 1:]).sum(
-        # axis=(0, 2)
-        # )
-        # for i in range(len(q_dis_s))
-        # ]
-        # )
-        # Q = np.sum(Q_s, axis=0) / q_dis.shape[0]
     else:
         Q = np.multiply.outer(q_dis[..., 1:], q_dis[..., 1:]).sum(axis=(0, 2)) / q_dis.shape[0]
     return Q
@@ -676,6 +645,27 @@ def get_sign_carrying_disorientation_angle(q_dis, chunk_size=None, r_star=None) 
     angles[np.isinf(angles)] = 0
 
     return angles
+
+
+# Symmetry
+
+
+def symmetrize(q: np.ndarray, laue_id: int) -> np.ndarray:
+    """Symmetrizes a quaternion using the Laue group.
+
+    Args:
+        q: shape (N, 4) quaternions
+        laue_id: integer between inclusive [1, 11]
+
+    Returns:
+        The symmetrized quaternions, a np.ndarray of shape (N, |Laue group|, 4)
+    """
+    S = laue_elements(laue_id)
+    q = qu_norm_std(q)
+    q = q.reshape(-1, 1, 4)
+    S = S.reshape(1, -1, 4)
+    q_sym = qu_prod(S[None], q[:, None]).reshape(q.shape[0], -1, 4)
+    return q_sym
 
 
 def laue_elements(laue_id: int) -> np.ndarray:

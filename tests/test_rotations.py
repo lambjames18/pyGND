@@ -28,34 +28,6 @@ def quaternion_misorientation_degrees(qu1, qu2):
     return np.degrees(angle_rad)
 
 
-@pytest.fixture
-def test_quaternions():
-    """Generate a set of test quaternions including edge cases."""
-    np.random.seed(1)
-    n = int(1e6)
-
-    # Generate random quaternions
-    qu = np.random.random((n, 4)).astype(np.float64)
-    qu = quaternions.qu_norm(qu)
-
-    # Add specific edge cases
-    qu = np.vstack(
-        [
-            qu,
-            np.array(
-                [
-                    [1.0, 0.0, 0.0, 0.0],  # Identity
-                    [0.0, 0.0, 0.0, -1.0],  # 180-degree rotation
-                    [0.0, 0.4264014489670335, -0.6396021436482270, -0.6396021436482270],
-                ]
-            ).astype(
-                np.float64
-            ),  # Arbitrary
-        ]
-    )
-    return qu
-
-
 class TestQuaternionRoundTrip:
     """Test round-trip conversions starting from quaternions."""
 
