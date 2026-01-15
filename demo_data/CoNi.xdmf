@@ -1,0 +1,67 @@
+<?xml version="1.0"?>
+<!DOCTYPE Xdmf SYSTEM "Xdmf.dtd"[]>
+<Xdmf xmlns:xi="http://www.w3.org/2003/XInclude" Version="2.2">
+ <Domain>
+  <!-- *************** START OF ImageDataContainer *************** -->
+  <Grid Name="ImageDataContainer" GridType="Uniform">
+    <Topology TopologyType="3DCoRectMesh" Dimensions="51 51 51 "></Topology>
+    <Geometry Type="ORIGIN_DXDYDZ">
+      <!-- Origin  Z, Y, X -->
+      <DataItem Format="XML" Dimensions="3">0 0 0</DataItem>
+      <!-- DxDyDz (Spacing/Resolution) Z, Y, X -->
+      <DataItem Format="XML" Dimensions="3">1.5 1.5 1.5</DataItem>
+    </Geometry>
+    <Attribute Name="Confidence Index" AttributeType="Scalar" Center="Cell">
+      <DataItem Format="HDF" Dimensions="50 50 50 1" NumberType="Float" Precision="4" >
+        CoNi.dream3d:/DataContainers/ImageDataContainer/CellData/Confidence Index
+      </DataItem>
+    </Attribute>
+    <Attribute Name="EulerAngles" AttributeType="Vector" Center="Cell">
+      <DataItem Format="HDF" Dimensions="50 50 50 3" NumberType="Float" Precision="4" >
+        CoNi.dream3d:/DataContainers/ImageDataContainer/CellData/EulerAngles
+      </DataItem>
+    </Attribute>
+    <Attribute Name="FeatureIds" AttributeType="Scalar" Center="Cell">
+      <DataItem Format="HDF" Dimensions="50 50 50 1" NumberType="Int" Precision="4" >
+        CoNi.dream3d:/DataContainers/ImageDataContainer/CellData/FeatureIds
+      </DataItem>
+    </Attribute>
+    <Attribute Name="IPFColor" AttributeType="Vector" Center="Cell">
+      <DataItem Format="HDF" Dimensions="50 50 50 3" NumberType="UChar" Precision="1" >
+        CoNi.dream3d:/DataContainers/ImageDataContainer/CellData/IPFColor
+      </DataItem>
+    </Attribute>
+    <Attribute Name="Image Quality" AttributeType="Scalar" Center="Cell">
+      <DataItem Format="HDF" Dimensions="50 50 50 1" NumberType="Float" Precision="4" >
+        CoNi.dream3d:/DataContainers/ImageDataContainer/CellData/Image Quality
+      </DataItem>
+    </Attribute>
+    <Attribute Name="Phases" AttributeType="Scalar" Center="Cell">
+      <DataItem Format="HDF" Dimensions="50 50 50 1" NumberType="Int" Precision="4" >
+        CoNi.dream3d:/DataContainers/ImageDataContainer/CellData/Phases
+      </DataItem>
+    </Attribute>
+    <Attribute Name="GND_l2" AttributeType="Scalar" Center="Cell">
+      <DataItem Format="HDF" Dimensions="50 50 50 1" NumberType="Float" Precision="8" >
+        CoNi.dream3d:/DataContainers/ImageDataContainer/CellData/GND_l2
+      </DataItem>
+    </Attribute>
+    <Attribute Name="FDM_avg" AttributeType="Scalar" Center="Cell">
+      <DataItem Format="HDF" Dimensions="50 50 50 1" NumberType="Float" Precision="4" >
+        CoNi.dream3d:/DataContainers/ImageDataContainer/CellData/FDM_avg
+      </DataItem>
+    </Attribute>
+    <Attribute Name="FDM_max" AttributeType="Scalar" Center="Cell">
+      <DataItem Format="HDF" Dimensions="50 50 50 1" NumberType="Float" Precision="4" >
+        CoNi.dream3d:/DataContainers/ImageDataContainer/CellData/FDM_max
+      </DataItem>
+    </Attribute>
+    <Attribute Name="GND_l1" AttributeType="Scalar" Center="Cell">
+      <DataItem Format="HDF" Dimensions="50 50 50 1" NumberType="Float" Precision="8" >
+        CoNi.dream3d:/DataContainers/ImageDataContainer/CellData/GND_l1
+      </DataItem>
+    </Attribute>
+  </Grid>
+  <!-- *************** END OF ImageDataContainer *************** -->
+ </Domain>
+</Xdmf>
