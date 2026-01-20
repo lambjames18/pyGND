@@ -117,7 +117,7 @@ def read_dream3d(
         raise KeyError(
             f"Could not find a data array with the name '{ids_name}' in the dream3d file."
         )
-    ids = np.squeeze(ids)
+    ids = ids[..., 0] if ids.ndim == 4 and ids.shape[-1] == 1 else ids
 
     eulerangles = extract_data_from_h5(path, euler_name)
     if eulerangles is None:

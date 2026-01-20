@@ -1058,19 +1058,27 @@ def calculate_and_save(
         folder = Path(ang_path).parent
         euler, ids, spacing = io.read_ang(ang_path, grain_ids_path)
 
+    print("Euler angles shape:", euler.shape)
+    print("Grain IDs shape:", ids.shape)
+    print("Voxel spacing (m):", spacing)
+
     # Calculate the GND density
-    dd, mis = calculate(
-        euler,
-        ids,
-        cs,
-        slip_systems,
-        burgers,
-        spacing,
-        minimization,
-        n_cpus,
-        progress_bar,
-        chunk_size,
-    )
+    try:
+        dd, mis = calculate(
+            euler,
+            ids,
+            cs,
+            slip_systems,
+            burgers,
+            spacing,
+            minimization,
+            n_cpus,
+            progress_bar,
+            chunk_size,
+        )
+    except Exception as e:
+        print(f"Error during GND calculation: {e}")
+        return False
 
     print("\nResults summary:")
     print("----------------")
