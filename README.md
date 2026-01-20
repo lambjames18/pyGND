@@ -135,6 +135,12 @@ The package saves results in `.npy` files by default. If a DREAM.3D file is used
 - tqdm >= 4.50
 - joblib >= 1.0
 
+Conda environment example:
+
+```
+conda create -n pygnd_env python=3.12 numpy scipy h5py matplotlib tqdm joblib
+```
+
 ## Testing
 
 PyGND includes a comprehensive test suite with 72+ tests covering core functionality. To run tests:
