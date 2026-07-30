@@ -386,8 +386,9 @@ def qu_disorientation_directional(quats1: np.ndarray, quats2: np.ndarray, laue_i
     # symmetrize the quaternions
     quats2 = qu_prod_raw(laue_group, quats2.reshape(N, 1, 4))
 
-    # get misorientation quaternions
-    misori_quats = qu_prod(quats1, qu_conj(quats2))
+    # get misorientation quaternions, pairing each quats1[i] with the symmetric
+    # equivalents of quats2[i] (not every quats2[j])
+    misori_quats = qu_prod(quats1.reshape(N, 1, 4), qu_conj(quats2))
 
     # Collapse to only the unique quaternions
     misori_quats = np.unique(misori_quats, axis=1)
