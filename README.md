@@ -2,10 +2,11 @@
 
 **Geometrically Necessary Dislocation calculations for TriBeam 3D microstructures**
 
-[![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Pylint](https://img.shields.io/endpoint?url=https%3A%2F%2FPollockGroup.github.io%2FTriBeam_GND%2Fbadges%2Fpylint.json)](https://PollockGroup.github.io/TriBeam_GND/badges/pylint.json)
+[![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2FPollockGroup.github.io%2FTriBeam_GND%2Fbadges%2Fcoverage.json)](https://PollockGroup.github.io/TriBeam_GND/badges/coverage.json)
+[![Docs](https://img.shields.io/badge/docs-pdoc-blue)](https://PollockGroup.github.io/TriBeam_GND/api/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://github.com/PollockGroup/TriBeam_GND/actions/workflows/tests.yml/badge.svg)](https://github.com/PollockGroup/TriBeam_GND/actions/workflows/tests.yml)
-[![codecov](https://codecov.io/gh/PollockGroup/TriBeam_GND/branch/main/graph/badge.svg)](https://codecov.io/gh/PollockGroup/TriBeam_GND)
+[![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
 PyGND is a Python package for calculating geometrically necessary dislocation (GND) densities from EBSD (Electron Backscatter Diffraction) data using Nye's dislocation theory. The code was originally developed in MATLAB by Wyatt Witzen and has been reimplemented in Python for improved performance and accessibility.
 
