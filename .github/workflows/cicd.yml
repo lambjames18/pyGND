@@ -28,6 +28,10 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ["3.10", "3.11", "3.12", "3.13"]
 
+    defaults:
+      run:
+        shell: bash
+
     steps:
       - name: Announce workflow file
         run: echo "Workflow file ${{ github.workflow_ref }}"
