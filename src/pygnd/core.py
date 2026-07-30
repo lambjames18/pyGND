@@ -915,74 +915,40 @@ def calculate(
     return dd, mis
 
 
-def calculate_and_save(
+def _run_calculation(
+    euler: np.ndarray,
+    ids: np.ndarray,
+    spacing: tuple,
     cs: int,
     burgers: np.ndarray,
-    dream3d_path: Path | str | None = None,
-    ids_name: str | None = None,
-    euler_name: str | None = None,
-    ang_path: Path | str | None = None,
-    grain_ids_path: Path | str | None = None,
-    spacing_units: str = "um",
-    minimization: str | Iterable[str] = "l2",
-    n_cpus: int = -1,
-    slip_systems: str = "all",
-    progress_bar: bool = False,
-    chunk_size: int = 1000,
-) -> tuple[dict[str, np.ndarray], np.ndarray]:
+    minimization: str | Iterable[str],
+    n_cpus: int,
+    slip_systems: str,
+    progress_bar: bool,
+    chunk_size: int,
+) -> tuple[dict[str, np.ndarray], np.ndarray] | None:
+    """Shared calculation + results-summary step used by both
+    calculate_and_save_dream3d and calculate_and_save_ang.
+
+    Args:
+        euler: The Euler angles for the dataset. Shape (..., 3)
+        ids: The grain IDs for the dataset. Shape (...)
+        spacing: The spacing between voxels in meters.
+        cs: The crystal structure of the material. 1 for FCC, 2 for BCC, 3 for HCP.
+        burgers: The burgers vector for the material in meters.
+        minimization: The minimization scheme to use. Either 'l2' or 'l1' or both.
+        n_cpus: The number of CPUs to use for parallel processing during L1 minimization.
+        slip_systems: The slip systems to be used.
+        progress_bar: Whether to display a progress bar during L1 minimization.
+        chunk_size: The size of the chunks to process in parallel.
+
+    Returns:
+        `(dd, mis)` on success, or `None` if the calculation itself raised.
     """
-    Calculate the GND density for a 2D or 3D EBSD dataset and save the results to a DREAM3D file.
-
-    Parameters:
-        path (str): The path to the DREAM3D file.
-        ids_name (str): The name of the grain ID array in the DREAM3D file.
-        euler_name (str): The name of the Euler angles array in the DREAM3D file.
-        spacing_units (str): Units of the spacing in the DREAM3D file. Options are
-            'nm', 'nanometer', 'nanometers', 'um', 'µm', 'micron', 'microns', 'micrometer',
-            'micrometers', 'mm', 'millimeter', 'millimeters', 'm', 'meter', 'meters'.
-        cs (int): The crystal structure of the material. 1 for FCC, 2 for BCC, 3 for HCP.
-        burgers (np.ndarray): The burgers vector for the material in meters.
-                              For HCP with pyramidal slip systems, this should be a tuple of the two burgers vectors.
-        minimization (str | Iterable[str]): The minimization scheme to use. Either 'l2' or 'l1' or both.
-        n_cpus (int): The number of CPUs to use for parallel processing during L1 minimization.
-                      If -1, all available CPUs minus one will be used. Not used for L2 minimization.
-        slip_systems (str, optional): The slip systems to be used. Defaults to 'all'.
-                                      (FCC) - unused, always 'all'
-                                      (BCC) - 'screw+110', 'screw+112', 'screw+123', 'screw+110+112', 'screw+110+123', 'screw+112+123', 'all'
-                                      (HCP) - 'basal', 'prismatic', 'pyramidal', 'basal+prismatic', 'basal+pyramidal', 'prismatic+pyramidal', 'all'
-        progress_bar (bool): Whether to display a progress bar during L1 minimization.
-        chunk_size (int): The size of the chunks to process in parallel.
-    """
-
-    # Handle inputs
-    if dream3d_path is not None and (ids_name is None or euler_name is None):
-        raise ValueError(
-            "If dream3d_path is provided, ids_name and euler_name must also be provided."
-        )
-    elif dream3d_path is not None and ang_path is not None:
-        raise ValueError("Provide either dream3d_path or ang_path, not both.")
-    if ang_path is not None and grain_ids_path is None:
-        warnings.warn(
-            "grain_ids_path not provided. Assuming the entire dataset is a single grain.",
-            Warning,
-        )
-
-    # Load the data based on the file type
-    if dream3d_path is not None:
-        path = dream3d_path
-        folder = Path(dream3d_path).parent
-        euler, ids, spacing = io.read_dream3d(dream3d_path, ids_name, euler_name, spacing_units)
-    elif ang_path is not None:
-        folder = Path(ang_path).parent
-        euler, ids, spacing = io.read_ang(ang_path, grain_ids_path)
-    else:
-        raise ValueError("Either dream3d_path or ang_path must be provided.")
-
     print("Euler angles shape:", euler.shape)
     print("Grain IDs shape:", ids.shape)
     print("Voxel spacing (m):", spacing)
 
-    # Calculate the GND density
     try:
         dd, mis = calculate(
             euler,
@@ -998,7 +964,7 @@ def calculate_and_save(
         )
     except Exception as e:
         print(f"Error during GND calculation: {e}")
-        return False
+        return None
 
     print("\nResults summary:")
     print("----------------")
@@ -1012,29 +978,197 @@ def calculate_and_save(
     print(f"- FDM_avg max: {mis.mean(axis=0).max():.3f}\u00b0")
     print(f"- FDM_max max: {mis.max(axis=0).max():.3f}\u00b0")
     print("----------------")
+    return dd, mis
 
-    if dream3d_path is not None:
-        # Save the results to the DREAM3D file
-        try:
-            result = io.save_to_dream3d(path, ids_name, dd, mis)
-        except Exception as e:
-            print(f"Error saving data to DREAM3D file: {e}")
-            result = False
 
-        if not result:
-            # Save temporary .npy files in case DREAM3D saving fails
-            io.save_npz(dd, mis, folder)
-            print("Failed to save results to DREAM3D file. See .npy files for raw data.")
-            return False
-        else:
-            print(f"Results saved to DREAM3D file: {Path(path).absolute()}")
+def calculate_and_save_dream3d(
+    dream3d_path: Path | str,
+    ids_name: str,
+    euler_name: str,
+    cs: int,
+    burgers: np.ndarray,
+    spacing_units: str = "um",
+    minimization: str | Iterable[str] = "l2",
+    n_cpus: int = -1,
+    slip_systems: str = "all",
+    progress_bar: bool = False,
+    chunk_size: int = 1000,
+) -> bool:
+    """Calculate the GND density for a DREAM3D EBSD dataset and save the
+    results back into the same DREAM3D file.
 
-    else:
-        # Remove z dimension if 2D, order is (C, Z, Y, X), with C either being 3 (mis) or n_slip_systems (dd)
-        dd = {k: v[:, 0] for k, v in dd.items()}
-        mis = mis[:, 0]
+    Args:
+        dream3d_path: Path to the DREAM3D file.
+        ids_name: Name of the grain ID data array in the DREAM3D file.
+        euler_name: Name of the Euler angles data array in the DREAM3D file.
+        cs: The crystal structure of the material. 1 for FCC, 2 for BCC, 3 for HCP.
+        burgers: The burgers vector for the material in meters. For HCP with
+            pyramidal slip systems, this should be a tuple of the two burgers vectors.
+        spacing_units: Units of the spacing in the DREAM3D file. Options are 'nm',
+            'nanometer', 'nanometers', 'um', 'µm', 'micron', 'microns', 'micrometer',
+            'micrometers', 'mm', 'millimeter', 'millimeters', 'm', 'meter', 'meters'.
+        minimization: The minimization scheme to use. Either 'l2' or 'l1' or both.
+        n_cpus: The number of CPUs to use for parallel processing during L1
+            minimization. If -1, all available CPUs minus one will be used. Not
+            used for L2 minimization.
+        slip_systems: The slip systems to be used. Defaults to 'all'.
+            (FCC) - unused, always 'all'.
+            (BCC) - 'screw+110', 'screw+112', 'screw+123', 'screw+110+112',
+            'screw+110+123', 'screw+112+123', 'all'.
+            (HCP) - 'basal', 'prismatic', 'pyramidal', 'basal+prismatic',
+            'basal+pyramidal', 'prismatic+pyramidal', 'all'.
+        progress_bar: Whether to display a progress bar during L1 minimization.
+        chunk_size: The size of the chunks to process in parallel.
+
+    Returns:
+        True if the results were saved back into the DREAM3D file. False if the
+        calculation or save failed, in which case a `.npy` fallback is written
+        next to the DREAM3D file instead.
+    """
+    folder = Path(dream3d_path).parent
+    euler, ids, spacing = io.read_dream3d(dream3d_path, ids_name, euler_name, spacing_units)
+
+    result = _run_calculation(
+        euler, ids, spacing, cs, burgers, minimization, n_cpus, slip_systems, progress_bar, chunk_size
+    )
+    if result is None:
+        return False
+    dd, mis = result
+
+    try:
+        saved = io.save_to_dream3d(dream3d_path, ids_name, dd, mis)
+    except Exception as e:
+        print(f"Error saving data to DREAM3D file: {e}")
+        saved = False
+
+    if not saved:
         io.save_npz(dd, mis, folder)
-        print("Calculation complete. Check .npy files for raw data.")
-        io.generate_images(gnd_data=dd, fdm_data=mis, folder=folder)
+        print("Failed to save results to DREAM3D file. See .npy files for raw data.")
+        return False
 
+    print(f"Results saved to DREAM3D file: {Path(dream3d_path).absolute()}")
     return True
+
+
+def calculate_and_save_ang(
+    ang_path: Path | str,
+    cs: int,
+    burgers: np.ndarray,
+    grain_ids_path: Path | str | None = None,
+    minimization: str | Iterable[str] = "l2",
+    n_cpus: int = -1,
+    slip_systems: str = "all",
+    progress_bar: bool = False,
+    chunk_size: int = 1000,
+) -> bool:
+    """Calculate the GND density for an .ang EBSD dataset and save the results
+    as `.npy` files (and preview images) next to the .ang file.
+
+    Args:
+        ang_path: Path to the .ang file.
+        cs: The crystal structure of the material. 1 for FCC, 2 for BCC, 3 for HCP.
+        burgers: The burgers vector for the material in meters. For HCP with
+            pyramidal slip systems, this should be a tuple of the two burgers vectors.
+        grain_ids_path: Path to a grain-data file generated by OIM Analysis. If
+            not provided, the entire dataset is assumed to be a single grain.
+        minimization: The minimization scheme to use. Either 'l2' or 'l1' or both.
+        n_cpus: The number of CPUs to use for parallel processing during L1
+            minimization. If -1, all available CPUs minus one will be used. Not
+            used for L2 minimization.
+        slip_systems: The slip systems to be used. Defaults to 'all'.
+            (FCC) - unused, always 'all'.
+            (BCC) - 'screw+110', 'screw+112', 'screw+123', 'screw+110+112',
+            'screw+110+123', 'screw+112+123', 'all'.
+            (HCP) - 'basal', 'prismatic', 'pyramidal', 'basal+prismatic',
+            'basal+pyramidal', 'prismatic+pyramidal', 'all'.
+        progress_bar: Whether to display a progress bar during L1 minimization.
+        chunk_size: The size of the chunks to process in parallel.
+
+    Returns:
+        True if the calculation succeeded and results were saved, False otherwise.
+    """
+    if grain_ids_path is None:
+        warnings.warn(
+            "grain_ids_path not provided. Assuming the entire dataset is a single grain.",
+            Warning,
+        )
+
+    folder = Path(ang_path).parent
+    euler, ids, spacing = io.read_ang(ang_path, grain_ids_path)
+
+    result = _run_calculation(
+        euler, ids, spacing, cs, burgers, minimization, n_cpus, slip_systems, progress_bar, chunk_size
+    )
+    if result is None:
+        return False
+    dd, mis = result
+
+    # Remove z dimension if 2D, order is (C, Z, Y, X), with C either being 3 (mis) or n_slip_systems (dd)
+    dd = {k: v[:, 0] for k, v in dd.items()}
+    mis = mis[:, 0]
+    io.save_npz(dd, mis, folder)
+    print("Calculation complete. Check .npy files for raw data.")
+    io.generate_images(gnd_data=dd, fdm_data=mis, folder=folder)
+    return True
+
+
+def calculate_and_save(
+    cs: int,
+    burgers: np.ndarray,
+    dream3d_path: Path | str | None = None,
+    ids_name: str | None = None,
+    euler_name: str | None = None,
+    ang_path: Path | str | None = None,
+    grain_ids_path: Path | str | None = None,
+    spacing_units: str = "um",
+    minimization: str | Iterable[str] = "l2",
+    n_cpus: int = -1,
+    slip_systems: str = "all",
+    progress_bar: bool = False,
+    chunk_size: int = 1000,
+) -> bool:
+    """Deprecated: use `calculate_and_save_dream3d` or `calculate_and_save_ang` instead.
+
+    This combined-argument entry point is kept only for backwards compatibility
+    and dispatches to one of the two functions above based on whether
+    `dream3d_path` or `ang_path` is provided.
+    """
+    warnings.warn(
+        "calculate_and_save() is deprecated; use calculate_and_save_dream3d() "
+        "or calculate_and_save_ang() instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    if dream3d_path is not None and ang_path is not None:
+        raise ValueError("Provide either dream3d_path or ang_path, not both.")
+    if dream3d_path is not None:
+        if ids_name is None or euler_name is None:
+            raise ValueError(
+                "If dream3d_path is provided, ids_name and euler_name must also be provided."
+            )
+        return calculate_and_save_dream3d(
+            dream3d_path,
+            ids_name,
+            euler_name,
+            cs,
+            burgers,
+            spacing_units,
+            minimization,
+            n_cpus,
+            slip_systems,
+            progress_bar,
+            chunk_size,
+        )
+    if ang_path is not None:
+        return calculate_and_save_ang(
+            ang_path,
+            cs,
+            burgers,
+            grain_ids_path,
+            minimization,
+            n_cpus,
+            slip_systems,
+            progress_bar,
+            chunk_size,
+        )
+    raise ValueError("Either dream3d_path or ang_path must be provided.")
