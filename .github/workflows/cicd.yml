@@ -55,7 +55,7 @@ jobs:
         run: uv build
 
       - name: Run Pylint
-        run: uv run pylint ${{ env.PACKAGE_SRC }}
+        run: uv run pylint ${{ env.PACKAGE_SRC }} || uv run pylint-exit --error-fail $?
 
       - name: Run Pytest
         run: >
