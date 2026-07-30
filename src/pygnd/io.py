@@ -53,7 +53,8 @@ def read_ang(
     """
     num_header_lines = 0
     col_names = None
-    with open(path, "r") as f:
+    ncols = nrows = res = None
+    with open(path, "r", encoding="utf-8") as f:
         for line in f:
             if line[0] == "#":
                 num_header_lines += 1
@@ -67,16 +68,22 @@ def read_ang(
                     res = float(line.split(": ")[1].strip())
             else:
                 break
-    if col_names is None:
-        col_names = ["phi1", "PHI", "phi2", "x", "y", "IQ", "CI", "Phase index"]
+    if ncols is None or nrows is None or res is None:
+        raise ValueError(
+            "The .ang header is missing one of the required NCOLS_ODD, NROWS, or XSTEP fields."
+        )
     raw_data = np.genfromtxt(path, skip_header=num_header_lines)
     n_entries = raw_data.shape[-1]
-    if raw_data.shape[0] == ncols * nrows:
-        data = raw_data.reshape((nrows, ncols, n_entries))
-    elif raw_data.shape != ncols * nrows:
+    if col_names is None:
+        default_names = ["phi1", "PHI", "phi2", "x", "y", "IQ", "CI", "Phase index"]
+        col_names = default_names[:n_entries] + [
+            f"col_{i}" for i in range(len(default_names), n_entries)
+        ]
+    if raw_data.shape[0] != ncols * nrows:
         raise ValueError(
-            f"The number of data points ({raw_data.size}) does not match the expected grid ({nrows} rows, {ncols} cols, {ncols * nrows} total points). "
+            f"The number of data points ({raw_data.shape[0]}) does not match the expected grid ({nrows} rows, {ncols} cols, {ncols * nrows} total points). "
         )
+    data = raw_data.reshape((nrows, ncols, n_entries))
 
     out = {col_names[i]: data[:, :, i] for i in range(n_entries)}
     eulerangles = np.array([out["phi1"], out["PHI"], out["phi2"]]).T.astype(float)
@@ -329,7 +336,7 @@ def save_to_dream3d(path: str | Path, ids_name: str, gnd_data: dict, fdm_data: n
 
     # Use the ids path to find the cell data group and create paths for new data
     cell_data_path = "/".join(ids_path.split("/")[:-1])
-    xdmf_path = str(path).replace(".dream3d", ".xdmf")
+    xdmf_path = str(Path(path).with_suffix(".xdmf"))
     modify_xdmf = os.path.exists(xdmf_path)
     if not modify_xdmf:
         print(
@@ -377,7 +384,7 @@ def extract_path_from_h5(h5_file_path: str, target_name: str) -> str:
 
         def recursive_search(name, obj):
             if isinstance(obj, h5py.Dataset):
-                if name.endswith(target_name):
+                if name == target_name or name.endswith("/" + target_name):
                     return name
                 else:
                     return None
@@ -443,7 +450,7 @@ def extract_data_from_h5(h5_file_path: str, target_name: str) -> np.ndarray:
 
         def recursive_search(name, obj):
             if isinstance(obj, h5py.Dataset):
-                if name.endswith(target_name):
+                if name == target_name or name.endswith("/" + target_name):
                     return obj[...]
                 else:
                     return None
