@@ -349,3 +349,214 @@ class TestAddDataToH5:
         h5_group.close()
 
         h5_file_path.unlink()
+
+
+def create_ang_file(tmp_path, nrows=2, ncols=3, extra_columns=0, include_column_headers=True):
+    """Create a synthetic .ang file for testing read_ang."""
+    n_entries = 8 + extra_columns
+    lines = []
+    lines.append(f"# XSTEP: 0.500000")
+    lines.append(f"# YSTEP: 0.500000")
+    lines.append(f"# NCOLS_ODD: {ncols}")
+    lines.append(f"# NCOLS_EVEN: {ncols}")
+    lines.append(f"# NROWS: {nrows}")
+    if include_column_headers:
+        base_names = ["phi1", "PHI", "phi2", "x", "y", "IQ", "CI", "Phase index"]
+        names = base_names + [f"extra_{i}" for i in range(extra_columns)]
+        lines.append("# COLUMN_HEADERS: " + ", ".join(names))
+
+    path = tmp_path / "test.ang"
+    with open(path, "w") as f:
+        f.write("\n".join(lines) + "\n")
+        for r in range(nrows):
+            for c in range(ncols):
+                row = [0.1, 0.2, 0.3, float(c), float(r), 100.0, 0.5, 1] + [0.0] * extra_columns
+                f.write(" ".join(f"{v:.6f}" for v in row) + "\n")
+    return path
+
+
+class TestReadAng:
+    """Tests for read_ang function."""
+
+    def test_read_valid_file(self, tmp_path):
+        path = create_ang_file(tmp_path, nrows=2, ncols=3)
+        euler, ids, spacing = io.read_ang(path)
+        assert euler.shape == (1, 2, 3, 3)
+        assert ids.shape == (1, 2, 3)
+        assert np.allclose(ids, 1)  # no ids_path given -> all ones
+        assert np.allclose(spacing, 0.5e-6)
+
+    def test_euler_angle_values(self, tmp_path):
+        path = create_ang_file(tmp_path, nrows=2, ncols=3)
+        euler, _, _ = io.read_ang(path)
+        assert np.allclose(euler[0, ..., 0], 0.1)
+        assert np.allclose(euler[0, ..., 1], 0.2)
+        assert np.allclose(euler[0, ..., 2], 0.3)
+
+    def test_extra_columns_without_column_headers(self, tmp_path):
+        """A file with more than 8 data columns and no explicit COLUMN_HEADERS
+        line should not raise IndexError (regression test)."""
+        path = create_ang_file(
+            tmp_path, nrows=2, ncols=3, extra_columns=2, include_column_headers=False
+        )
+        euler, ids, spacing = io.read_ang(path)
+        assert euler.shape == (1, 2, 3, 3)
+
+    def test_missing_header_field_raises(self, tmp_path):
+        """A header missing NCOLS_ODD/NROWS/XSTEP should raise a clear
+        ValueError instead of UnboundLocalError (regression test)."""
+        path = tmp_path / "bad.ang"
+        with open(path, "w") as f:
+            f.write("# YSTEP: 0.500000\n# NROWS: 2\n")
+            for _ in range(6):
+                f.write(" ".join(["0.0"] * 8) + "\n")
+        with pytest.raises(ValueError, match="missing"):
+            io.read_ang(path)
+
+    def test_grid_size_mismatch_raises(self, tmp_path):
+        path = create_ang_file(tmp_path, nrows=2, ncols=3)
+        # Corrupt the file by appending an extra data row that breaks the grid size
+        with open(path, "a") as f:
+            f.write(" ".join(["0.0"] * 8) + "\n")
+        with pytest.raises(ValueError, match="does not match the expected grid"):
+            io.read_ang(path)
+
+    def test_with_ids_path(self, tmp_path):
+        path = create_ang_file(tmp_path, nrows=2, ncols=3)
+        ids_path = tmp_path / "grain_ids.txt"
+        # 6 points (2x3), column index 8 holds the grain id
+        with open(ids_path, "w") as f:
+            for i in range(6):
+                row = [0.0] * 8 + [float(i % 2)]
+                f.write(" ".join(f"{v:.6f}" for v in row) + "\n")
+        euler, ids, spacing = io.read_ang(path, ids_path=ids_path)
+        assert ids.shape == (1, 2, 3)
+        assert set(np.unique(ids).tolist()) == {0, 1}
+
+
+class TestNpzSaveRemove:
+    """Tests for save_npz and remove_npz."""
+
+    def test_save_and_remove(self, tmp_path):
+        gnd_data = {"l1": np.random.rand(18, 4, 4), "l2": np.random.rand(18, 4, 4)}
+        fdm_data = np.random.rand(3, 4, 4)
+        io.save_npz(gnd_data, fdm_data, tmp_path)
+
+        assert (tmp_path / "gnd_l1.npy").exists()
+        assert (tmp_path / "gnd_l2.npy").exists()
+        assert (tmp_path / "fdm.npy").exists()
+
+        saved_l1 = np.load(tmp_path / "gnd_l1.npy")
+        assert np.allclose(saved_l1, gnd_data["l1"])
+
+        io.remove_npz(tmp_path)
+        assert not (tmp_path / "gnd_l1.npy").exists()
+        assert not (tmp_path / "gnd_l2.npy").exists()
+        assert not (tmp_path / "fdm.npy").exists()
+
+    def test_remove_npz_missing_files_does_not_raise(self, tmp_path):
+        """remove_npz on a folder with no .npy files should be a no-op."""
+        io.remove_npz(tmp_path)  # should not raise
+
+
+class TestGenerateImages:
+    """Tests for generate_images."""
+
+    def test_generates_expected_png_files(self, tmp_path):
+        gnd_data = {"l2": np.random.rand(3, 8, 8) + 1e-6}
+        fdm_data = np.random.rand(3, 8, 8) + 1e-6
+        io.generate_images(gnd_data=gnd_data, fdm_data=fdm_data, folder=tmp_path)
+
+        images_dir = tmp_path / "images"
+        assert images_dir.exists()
+        for i in range(3):
+            assert (images_dir / f"gnd_l2_{i}.png").exists()
+        assert (images_dir / "gnd_l2_sum.png").exists()
+        assert (images_dir / "fdm_avg.png").exists()
+        assert (images_dir / "fdm_max.png").exists()
+
+
+def create_test_xdmf(tmp_path, dims=(2, 2, 2), filename="test.dream3d.xdmf"):
+    """Create a minimal synthetic XDMF file matching the demo data's structure."""
+    topo_dims = " ".join(str(d + 1) for d in dims) + " "
+    content = f"""<?xml version="1.0"?>
+<Xdmf>
+ <Domain>
+  <Grid Name="ImageDataContainer" GridType="Uniform">
+    <Topology TopologyType="3DCoRectMesh" Dimensions="{topo_dims}"></Topology>
+    <Attribute Name="FeatureIds" AttributeType="Scalar" Center="Cell">
+      <DataItem Format="HDF" Dimensions="{dims[0]} {dims[1]} {dims[2]} 1" NumberType="Int" Precision="4" >
+        test.dream3d:/DataContainers/ImageDataContainer/CellData/FeatureIds
+      </DataItem>
+    </Attribute>
+  </Grid>
+ </Domain>
+</Xdmf>
+"""
+    path = tmp_path / filename
+    path.write_text(content)
+    return path
+
+
+class TestAddDatasetToXdmf:
+    """Tests for add_dataset_to_xdmf."""
+
+    def test_add_new_scalar_dataset(self, tmp_path):
+        xdmf_path = create_test_xdmf(tmp_path, dims=(2, 2, 2))
+        data = np.random.rand(2, 2, 2).astype(np.float32)
+        io.add_dataset_to_xdmf(xdmf_path, "NewData", data)
+        content = xdmf_path.read_text()
+        assert 'Attribute Name="NewData"' in content
+        assert 'AttributeType="Scalar"' in content.split('Name="NewData"')[1].split(">")[0]
+
+    def test_skip_existing_dataset(self, tmp_path):
+        xdmf_path = create_test_xdmf(tmp_path, dims=(2, 2, 2))
+        data = np.random.rand(2, 2, 2).astype(np.float32)
+        io.add_dataset_to_xdmf(xdmf_path, "FeatureIds", data)  # already exists
+        content = xdmf_path.read_text()
+        assert content.count('Attribute Name="FeatureIds"') == 1
+
+    def test_dimension_mismatch_raises(self, tmp_path):
+        xdmf_path = create_test_xdmf(tmp_path, dims=(2, 2, 2))
+        bad_data = np.random.rand(3, 3, 3).astype(np.float32)
+        with pytest.raises(ValueError, match="not compatible"):
+            io.add_dataset_to_xdmf(xdmf_path, "BadData", bad_data)
+
+    def test_too_few_dims_raises(self, tmp_path):
+        xdmf_path = create_test_xdmf(tmp_path, dims=(2, 2, 2))
+        bad_data = np.random.rand(2, 2).astype(np.float32)
+        with pytest.raises(ValueError, match="at least 3-dimensional"):
+            io.add_dataset_to_xdmf(xdmf_path, "BadData", bad_data)
+
+    def test_too_many_dims_raises(self, tmp_path):
+        xdmf_path = create_test_xdmf(tmp_path, dims=(2, 2, 2))
+        bad_data = np.random.rand(2, 2, 2, 3, 1).astype(np.float32)
+        with pytest.raises(ValueError, match="at most 4-dimensional"):
+            io.add_dataset_to_xdmf(xdmf_path, "BadData", bad_data)
+
+
+class TestExtractPathFromH5DatasetCollision:
+    """Regression test for the endswith substring-collision bug: a DREAM3D file
+    commonly has both a per-voxel array (e.g. EulerAngles) and a per-grain
+    average array (e.g. AvgEulerAngles); lookups must not conflate the two."""
+
+    def test_does_not_match_avg_prefixed_dataset(self, tmp_path):
+        h5_file_path = tmp_path / "collision.dream3d"
+        with h5py.File(h5_file_path, "w") as f:
+            # Name this group to sort alphabetically before the real one, so
+            # traversal visits the colliding dataset first.
+            avg_group = f.create_group("AAA_CellFeatureData")
+            avg_group.create_dataset(
+                "AvgEulerAngles", data=np.zeros((5, 3), dtype=np.float32) + 99.0
+            )
+            cell_group = f.create_group("ZZZ_CellData")
+            cell_group.create_dataset(
+                "EulerAngles", data=np.ones((2, 2, 2, 3), dtype=np.float32)
+            )
+
+        path = io.extract_path_from_h5(h5_file_path, "EulerAngles")
+        assert path == "/ZZZ_CellData/EulerAngles"
+
+        data = io.extract_data_from_h5(h5_file_path, "EulerAngles")
+        assert data.shape == (2, 2, 2, 3)
+        assert np.allclose(data, 1.0)
