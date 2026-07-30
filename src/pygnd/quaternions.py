@@ -251,7 +251,7 @@ def qu_disorientation(
         quats1 = quats1.reshape(data_shape)
     elif data_shape == (1, 4):
         pass
-    elif data_shape == quats2.shape:
+    elif data_shape == quats1.shape:
         pass
     else:
         raise ValueError(
@@ -366,7 +366,7 @@ def qu_disorientation_directional(quats1: np.ndarray, quats2: np.ndarray, laue_i
         quats1 = quats1.reshape(data_shape)
     elif data_shape == (1, 4):
         pass
-    elif data_shape == quats2.shape:
+    elif data_shape == quats1.shape:
         pass
     else:
         raise ValueError(
@@ -386,8 +386,9 @@ def qu_disorientation_directional(quats1: np.ndarray, quats2: np.ndarray, laue_i
     # symmetrize the quaternions
     quats2 = qu_prod_raw(laue_group, quats2.reshape(N, 1, 4))
 
-    # get misorientation quaternions
-    misori_quats = qu_prod(quats1, qu_conj(quats2))
+    # get misorientation quaternions, pairing each quats1[i] with the symmetric
+    # equivalents of quats2[i] (not every quats2[j])
+    misori_quats = qu_prod(quats1.reshape(N, 1, 4), qu_conj(quats2))
 
     # Collapse to only the unique quaternions
     misori_quats = np.unique(misori_quats, axis=1)
@@ -518,7 +519,7 @@ def qu_rotate_sets_sphere(points_start: np.ndarray, points_finish) -> np.ndarray
     # set the output
     out = np.zeros((points_start.shape[0], 4), dtype=points_start.dtype)
     out[valid, 0] = np.cos(angle / 2)
-    out[valid, 1:] = np.sin(angle / 2).unsqueeze(-1) * (
+    out[valid, 1:] = np.sin(angle / 2)[..., None] * (
         cross / np.linalg.norm(cross, axis=-1, keepdims=True)
     )
     out[~valid, 0] = 1
@@ -612,12 +613,13 @@ def get_Q_tensor(q_dis, chunk_size=None) -> np.ndarray:
     if q_dis.shape[0] > 10000:
         q_dis_s = np.array_split(q_dis, q_dis.shape[0] // 1000, axis=0)
         Q_s = Parallel(n_jobs=5)(
-            delayed(np.multiply.outer)(q_dis_s[i][..., 1:], q_dis_s[i][..., 1:])
+            delayed(np.einsum)("ij,ik->jk", q_dis_s[i][..., 1:], q_dis_s[i][..., 1:])
             for i in range(len(q_dis_s))
         )
-        Q = np.array([q_s.sum(axis=(0, 2)) for q_s in Q_s]).sum(axis=0) / q_dis.shape[0]
+        Q = np.sum(Q_s, axis=0) / q_dis.shape[0]
     else:
-        Q = np.multiply.outer(q_dis[..., 1:], q_dis[..., 1:]).sum(axis=(0, 2)) / q_dis.shape[0]
+        v = q_dis[..., 1:]
+        Q = np.einsum("ij,ik->jk", v, v) / q_dis.shape[0]
     return Q
 
 

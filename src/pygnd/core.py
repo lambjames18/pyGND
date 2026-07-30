@@ -1,3 +1,4 @@
+import os
 import warnings
 from pathlib import Path
 from collections.abc import Iterable
@@ -14,6 +15,15 @@ from pygnd.utils import tqdm_joblib
 warnings.filterwarnings("ignore", category=UserWarning)
 
 PRECISION = np.float32
+
+
+def _resolve_n_cpus(n_cpus: int) -> int:
+    """Resolve a joblib-style n_cpus value (e.g. -1 for all cores, -2 for all but
+    one) to a positive core count, for use in chunk-size arithmetic."""
+    cpu_count = os.cpu_count() or 1
+    if n_cpus < 0:
+        return max(1, cpu_count + 1 + n_cpus)
+    return max(1, n_cpus)
 
 
 def get_linear_operator(cs: int, slip_systems: str = "all") -> tuple[np.ndarray, np.ndarray]:
@@ -521,11 +531,12 @@ def get_orientation_gradients(
     else:
         # Setup chunk size
         if chunk_size is None:
-            chunk_size = min(quats.shape[0] // n_cpus, quats.shape[0] // 100)
+            resolved_cpus = _resolve_n_cpus(n_cpus)
+            chunk_size = max(1, min(N // resolved_cpus, N // 100))
 
         # Split the data into chunks
-        q0 = np.array_split(q0, q0.shape[0] // chunk_size)
-        q1 = np.array_split(q1, q1.shape[0] // chunk_size)
+        q0 = np.array_split(q0, max(1, q0.shape[0] // chunk_size))
+        q1 = np.array_split(q1, max(1, q1.shape[0] // chunk_size))
         n_chunks = len(q0)
         chunks = zip(q0, q1)
 
@@ -588,14 +599,12 @@ def _minimize_l2(Lambda: np.ndarray, B: np.ndarray, chunk_size: int = None) -> n
     Returns:
         np.ndarray: The dislocation density. Shape (n_slip_systems, n_voxels)"""
     if chunk_size is None:
-        out = B.dot(Lambda.T).reshape((-1,))
+        dd = B.dot(Lambda.T).reshape((-1,))
     else:
-        # Split Lambda into chunks
-        chunks = np.array_split(Lambda, Lambda.shape[0] // chunk_size)
-        out = np.hstack([B.dot(chunk.T).reshape((-1,)) for chunk in chunks])
-
-    dd = B.dot(Lambda.T).reshape((-1,))
-    # print("L2 reconstruction error:", np.linalg.norm(B.dot(Lambda.T) - dd.reshape(B.shape[0], -1)))
+        # Split Lambda into chunks, rebuilding the full (n_slip_systems, n_voxels)
+        # matrix before the final flatten so the ordering matches the unchunked path
+        chunks = np.array_split(Lambda, max(1, Lambda.shape[0] // chunk_size))
+        dd = np.hstack([B.dot(chunk.T) for chunk in chunks]).reshape((-1,))
     return dd
 
 
@@ -825,10 +834,11 @@ def minimize(
     elif minimization == "l1":
         # Setup chunk size
         if chunk_size is None:
-            chunk_size = max(1, Lambda.shape[0] // (n_cpus * 4))
+            resolved_cpus = _resolve_n_cpus(n_cpus)
+            chunk_size = max(1, Lambda.shape[0] // (resolved_cpus * 4))
 
         # Split into chunks
-        chunks = np.array_split(Lambda, Lambda.shape[0] // chunk_size)
+        chunks = np.array_split(Lambda, max(1, Lambda.shape[0] // chunk_size))
 
         # Add progress bar if desired
         if progress_bar:
@@ -850,13 +860,15 @@ def minimize(
     else:
         burgers_basal_prismatic = None
         burgers_pyramidal = None
+        if not isinstance(burgers, (tuple, list, np.ndarray)):
+            burgers = (burgers,)
         if len(burgers) == 2:
             burgers_basal_prismatic = burgers[0]
             burgers_pyramidal = burgers[1]
         elif len(burgers) == 1 and dd.shape[0] <= 9:
-            burgers_basal_prismatic = burgers
+            burgers_basal_prismatic = burgers[0]
         elif len(burgers) == 1 and dd.shape[0] == 24:
-            burgers_pyramidal = burgers
+            burgers_pyramidal = burgers[0]
         else:
             raise ValueError(
                 "For HCP, when mixing basal/prismatic and pyramidal slip systems, the Burgers vector must be a tuple of (basa/prismatic, pyramidal) Burgers vectors."
@@ -1088,7 +1100,11 @@ def calculate_and_save(
     print("----------------")
     for m in dd:
         print(f"- {m} GND max: {dd[m].max():.3e} m\u207b\u00b2")
-        print(f"- {m} GND min (non-zero): {dd[m][dd[m] > 0].min():.3e} m\u207b\u00b2")
+        nonzero = dd[m][dd[m] > 0]
+        if nonzero.size > 0:
+            print(f"- {m} GND min (non-zero): {nonzero.min():.3e} m\u207b\u00b2")
+        else:
+            print(f"- {m} GND min (non-zero): none (all values are zero)")
     print(f"- FDM_avg max: {mis.mean(axis=0).max():.3f}\u00b0")
     print(f"- FDM_max max: {mis.max(axis=0).max():.3f}\u00b0")
     print("----------------")
