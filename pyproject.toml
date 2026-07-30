@@ -52,7 +52,7 @@ local_scheme = "no-local-version"  # Ensures clean versions like 0.0.9 instead o
 packages = ["src/pytribeam"]
 
 [tool.hatch.build.hooks.vcs]
-version-file = "src/pytribeam/_version.py"  # File to be generated when compiled
+version-file = "src/pygnd/_version.py"  # File to be generated when compiled
 
 # ----------------------
 # Pytest Configuration
