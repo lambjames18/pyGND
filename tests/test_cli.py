@@ -130,6 +130,23 @@ class TestMainAng:
         captured = capsys.readouterr()
         assert "Error:" in captured.err
 
+    def test_dry_run_reports_shapes_without_calculating(self, tmp_path, capsys):
+        """Dry run should not require --cs/--burgers and should not write any
+        output files, only report the loaded array shapes."""
+        ang_path = create_ang_file(tmp_path, nrows=3, ncols=2)
+        exit_code = cli.main(["ang", str(ang_path), "--dry-run"])
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        assert "Dry run" in captured.out
+        assert "(1, 3, 2, 3)" in captured.out
+        assert not (tmp_path / "gnd_l2.npy").exists()
+
+    def test_dry_run_nonexistent_file_returns_clean_error(self, tmp_path, capsys):
+        exit_code = cli.main(["ang", str(tmp_path / "missing.ang"), "--dry-run"])
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert "Error:" in captured.err
+
 
 class TestMainDream3d:
     """Tests for `pygnd_calculate dream3d`."""
@@ -187,6 +204,43 @@ class TestMainDream3d:
                 "1",
                 "--burgers",
                 "1.0",
+            ]
+        )
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert "Error:" in captured.err
+
+    def test_dry_run_reports_shapes_without_calculating(self, tmp_path, capsys):
+        dream3d_path = create_dream3d_file(tmp_path, shape=(1, 2, 4))
+        exit_code = cli.main(
+            [
+                "dream3d",
+                str(dream3d_path),
+                "--ids-name",
+                "FeatureIds",
+                "--euler-name",
+                "EulerAngles",
+                "--dry-run",
+            ]
+        )
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        assert "Dry run" in captured.out
+        assert "(1, 2, 4, 3)" in captured.out
+        with h5py.File(dream3d_path, "r") as f:
+            assert "DataContainers/ImageDataContainer/CellData/GND_l2" not in f
+
+    def test_dry_run_invalid_ids_name_returns_clean_error(self, tmp_path, capsys):
+        dream3d_path = create_dream3d_file(tmp_path)
+        exit_code = cli.main(
+            [
+                "dream3d",
+                str(dream3d_path),
+                "--ids-name",
+                "NotARealName",
+                "--euler-name",
+                "EulerAngles",
+                "--dry-run",
             ]
         )
         assert exit_code == 1

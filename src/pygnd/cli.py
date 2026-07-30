@@ -5,7 +5,9 @@ HPC batch script, without needing to write a Python driver script.
 import argparse
 import sys
 
-from pygnd import __version__
+import numpy as np
+
+from pygnd import __version__, io
 from pygnd.core import calculate_and_save_ang, calculate_and_save_dream3d
 
 
@@ -45,20 +47,28 @@ def _parse_burgers(value: str):
 def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     """Add the calculation arguments shared by the dream3d and ang subcommands."""
     parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Only load and validate the input file (report array shapes and "
+        "exit) without running the GND calculation. --cs and --burgers are "
+        "not required in this mode.",
+    )
+    parser.add_argument(
         "--cs",
         type=int,
-        required=True,
+        default=None,
         choices=(1, 2, 3),
-        help="Crystal structure: 1 for FCC, 2 for BCC, 3 for HCP.",
+        help="Crystal structure: 1 for FCC, 2 for BCC, 3 for HCP. "
+        "Required unless --dry-run is set.",
     )
     parser.add_argument(
         "--burgers",
         type=_parse_burgers,
-        required=True,
+        default=None,
         metavar="VALUE[,VALUE]",
         help="Burgers vector magnitude in meters. For HCP with mixed "
         "basal/prismatic + pyramidal slip systems, pass two comma-separated "
-        "values, e.g. 2.48e-10,2.5e-10.",
+        "values, e.g. 2.48e-10,2.5e-10. Required unless --dry-run is set.",
     )
     parser.add_argument("--slip-systems", default="all", help=_SLIP_SYSTEMS_HELP)
     parser.add_argument(
@@ -135,6 +145,36 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _dry_run(args: argparse.Namespace) -> int:
+    """Load the input file and report array shapes without running the GND
+    calculation. Useful as a fast pre-flight check before queuing a large HPC
+    job, to catch a bad file path or dataset name early.
+
+    Args:
+        args: parsed command line arguments.
+
+    Returns:
+        Process exit code: `0` if the file loaded successfully, `1` otherwise.
+    """
+    try:
+        if args.command == "dream3d":
+            euler, ids, spacing = io.read_dream3d(
+                args.dream3d_path, args.ids_name, args.euler_name, args.spacing_units
+            )
+        else:
+            euler, ids, spacing = io.read_ang(args.ang_path, args.grain_ids_path)
+    except (FileNotFoundError, KeyError, ValueError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print("Dry run: file loaded successfully, no calculation performed.")
+    print("Euler angles shape:", euler.shape)
+    print("Grain IDs shape:", ids.shape)
+    print("Voxel spacing (m):", spacing)
+    print("Unique grain IDs:", np.unique(ids).size)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Entry point for the `pygnd_calculate` console script.
 
@@ -146,6 +186,12 @@ def main(argv: list[str] | None = None) -> int:
     """
     parser = _build_parser()
     args = parser.parse_args(argv)
+
+    if args.dry_run:
+        return _dry_run(args)
+
+    if args.cs is None or args.burgers is None:
+        parser.error("--cs and --burgers are required unless --dry-run is set")
 
     minimization = (
         args.minimization[0] if len(args.minimization) == 1 else tuple(args.minimization)
