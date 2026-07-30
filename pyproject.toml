@@ -49,7 +49,7 @@ source = "vcs"
 local_scheme = "no-local-version"  # Ensures clean versions like 0.0.9 instead of 0.0.9+g1234567
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/pytribeam"]
+packages = ["src/pygnd"]
 
 [tool.hatch.build.hooks.vcs]
 version-file = "src/pygnd/_version.py"  # File to be generated when compiled
