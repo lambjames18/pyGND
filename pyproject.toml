@@ -44,6 +44,9 @@ dev = [
     "pdoc",
 ]
 
+[project.scripts]
+pygnd_gui = "pygnd.gui:main"
+
 [project.urls]
 Homepage = "https://github.com/lambjames18/pyGND"
 Repository = "https://github.com/lambjames18/pyGND"
@@ -84,7 +87,7 @@ addopts = "--cov=src/pygnd --cov-report=term-missing -rs"
 branch = true
 relative_files = true
 source = ["src"]
-omit = ["*/tests/*", "*/__pycache__/*"]
+omit = ["*/tests/*", "*/__pycache__/*", "gui.py"]
 
 [tool.coverage.paths]
 pygnd = [
