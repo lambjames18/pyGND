@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PACKAGE_IMPORT: pytribeam
-  PACKAGE_SRC: src/pytribeam
+  PACKAGE_IMPORT: pygnd
+  PACKAGE_SRC: src/pygnd
 
 jobs:
   test:
