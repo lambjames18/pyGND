@@ -14,7 +14,7 @@ from pygnd.utils import tqdm_joblib
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
-PRECISION = np.float32
+_PRECISION = np.float32
 
 
 def _resolve_n_cpus(n_cpus: int) -> int:
@@ -69,8 +69,8 @@ def get_linear_operator(cs: int, slip_systems: str = "all") -> tuple[np.ndarray,
 
     # Create the A matrix for the given crystal structure
     if cs == 1:
-        a = np.sqrt(3).astype(PRECISION) / 9
-        c = np.sqrt(3).astype(PRECISION) / 84
+        a = np.sqrt(3).astype(_PRECISION) / 9
+        c = np.sqrt(3).astype(_PRECISION) / 84
         d = 1 / 18
         f = 3 / 14
 
@@ -96,7 +96,7 @@ def get_linear_operator(cs: int, slip_systems: str = "all") -> tuple[np.ndarray,
                 [5 * d, 0, -f, 0, -d, 0, -f, 0, 5 * d],
                 [-d, 0, 0, 0, 5 * d, -f, 0, -f, 5 * d],
             ]
-        ).astype(PRECISION)
+        ).astype(_PRECISION)
 
         # FCC
         A = pseudo_inverse(B)
@@ -292,7 +292,7 @@ def pseudo_inverse(A: np.ndarray) -> np.ndarray:
         np.ndarray: The B matrix. Shape (n_slip_systems, 9)
     """
     # return A.T.dot(np.linalg.inv(A.dot(A.T))).astype(PRECISION)
-    return np.linalg.pinv(A).astype(PRECISION)
+    return np.linalg.pinv(A).astype(_PRECISION)
 
 
 def get_completeness(grain_ids: np.ndarray) -> np.ndarray:
@@ -389,7 +389,7 @@ def get_neighbors(completeness: np.ndarray) -> np.ndarray:
     # Create coordinate shifts for the pairs and the scale for the finite difference calculation
     shifts0 = np.zeros((3,) + shape + (3,), dtype=np.int32)
     shifts1 = np.zeros((3,) + shape + (3,), dtype=np.int32)
-    scale = np.zeros(shape + (3,), dtype=PRECISION)
+    scale = np.zeros(shape + (3,), dtype=_PRECISION)
 
     # Only central and backward differences will have a shift in the first point
     shifts0[0][(completeness[..., 0] == 2) | (completeness[..., 0] == 3)] = [-1, 0, 0]
@@ -484,7 +484,7 @@ def get_orientation_gradients(
     out_shape = quats.shape[:-1]
 
     # Reshape the data to be 1D
-    quats = quats.reshape(-1, 4).astype(PRECISION)
+    quats = quats.reshape(-1, 4).astype(_PRECISION)
     N = quats.shape[0]
     pts0 = pts0.reshape(-1, 3, 3)
     pts1 = pts1.reshape(-1, 3, 3)
@@ -512,12 +512,12 @@ def get_orientation_gradients(
     q0 = np.stack(
         [quats[pts0[:, 0]], quats[pts0[:, 1]], quats[pts0[:, 2]]],
         axis=1,
-        dtype=PRECISION,
+        dtype=_PRECISION,
     )  # (n_pairs, 3, 4)
     q1 = np.stack(
         [quats[pts1[:, 0]], quats[pts1[:, 1]], quats[pts1[:, 2]]],
         axis=1,
-        dtype=PRECISION,
+        dtype=_PRECISION,
     )  # (n_pairs, 3, 4)
     del quats, pts0, pts1  # Free memory
 
@@ -541,7 +541,7 @@ def get_orientation_gradients(
         chunks = zip(q0, q1)
 
         # Run the calculations in parallel
-        quats_disorientation = np.empty((N, 3, 4), dtype=PRECISION)
+        quats_disorientation = np.empty((N, 3, 4), dtype=_PRECISION)
         if progress_bar:
             with tqdm_joblib(
                 tqdm(total=n_chunks, desc="Calculating orientation gradients")
@@ -857,7 +857,7 @@ def calculate(
     if len(spacing) != ndim:
         raise ValueError("The spacing must have the same number of dimensions as the Euler angles")
 
-    euler = euler.astype(PRECISION)
+    euler = euler.astype(_PRECISION)
 
     # Handle minimization
     if isinstance(minimization, tuple):

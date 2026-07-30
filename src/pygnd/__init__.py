@@ -11,8 +11,6 @@ from pygnd.core import calculate_and_save, get_linear_operator
 from pygnd import core, io, rotations, quaternions, utils
 
 __all__ = [
-    "calculate_and_save",
-    "get_linear_operator",
     "core",
     "io",
     "rotations",

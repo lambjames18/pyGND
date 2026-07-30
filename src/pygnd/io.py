@@ -7,7 +7,7 @@ import numpy as np
 
 
 # Define Dream3d data types
-dream3d_dtypes = {
+_DREAM3D_DTYPES = {
     np.uint8: "DataArray<uint8_t> ",
     np.int8: "DataArray<int8_t> ",
     np.uint16: "DataArray<uint16_t> ",
@@ -20,7 +20,7 @@ dream3d_dtypes = {
     np.float64: "DataArray<double> ",
     bool: "DataArray<bool> ",
 }
-xdmf_dtype_formats = {  # (NumberType, Precision)
+_XDMF_DTYPE_FORMATS = {  # (NumberType, Precision)
     np.uint8: ("UChar", "1"),
     np.int8: ("Char", "1"),
     np.uint16: ("UInt", "2"),
@@ -217,7 +217,7 @@ def add_dataset_to_h5(h5group: h5py.Group, name: str, data: np.ndarray) -> h5py.
         return h5group[name]
 
     dtype = data.dtype.type
-    if dtype not in dream3d_dtypes:
+    if dtype not in _DREAM3D_DTYPES:
         raise TypeError(f"Unsupported data type for DREAM3D: {dtype}")
     dset = h5group.create_dataset(name, data=data, dtype=dtype)
     dset.attrs["ComponentDimensions"] = np.uint64([data.shape[-1]])
@@ -225,7 +225,7 @@ def add_dataset_to_h5(h5group: h5py.Group, name: str, data: np.ndarray) -> h5py.
         f"x={str(data.shape[2])},y={str(data.shape[1])},z={str(data.shape[0])} "
     )
     dset.attrs["DataArrayVersion"] = np.int32([2])
-    dset.attrs["ObjectType"] = np.bytes_(dream3d_dtypes[dtype])
+    dset.attrs["ObjectType"] = np.bytes_(_DREAM3D_DTYPES[dtype])
     dset.attrs["TupleDimensions"] = np.uint64(np.squeeze(data.shape[:-1][::-1]))
     print(f"Added dataset '{name}' to HDF5 group.")
 
@@ -277,7 +277,7 @@ def add_dataset_to_xdmf(xdmf_path: str | Path, dataset_name: str, data_array: np
     insertion_index = ["</Grid>" in line for line in xdmf_content].index(True)
 
     # Gather relevant data for the new dataset
-    data_type, precision = xdmf_dtype_formats[data_array.dtype.type]
+    data_type, precision = _XDMF_DTYPE_FORMATS[data_array.dtype.type]
     dimensions = " ".join(map(str, data_array.shape))
     attribute_type = (
         "Scalar"
