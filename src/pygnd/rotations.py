@@ -43,20 +43,16 @@ are:
 - `ho` - homochoric vector, shape `(..., 3)`.
 - `cu` - cubochoric vector, shape `(..., 3)`.
 
-Note: An object oriented approach to use this conversions is available in DAMASK, see
-https://damask.mpie.de and https://github.com/eisenforschung/DAMASK
 """
 
 import numpy as np
 
-epsijk = 1
-"""Convention for the sign of the Levi-Civita symbol used throughout these conversions."""
 
-# parameters for conversion from/to cubochoric
-sc = np.pi ** (1.0 / 6.0) / 6.0 ** (1.0 / 6.0)
-beta = np.pi ** (5.0 / 6.0) / 6.0 ** (1.0 / 6.0) / 2.0
-R1 = (3.0 * np.pi / 4.0) ** (1.0 / 3.0)
-# ---------- Quaternion ----------
+_EPSIJK = 1  # @private - Convention for the sign of the Levi-Civita symbol used throughout these conversions
+
+_SC = np.pi ** (1.0 / 6.0) / 6.0 ** (1.0 / 6.0)  # @private - Parameter for conversion to/from cubochoric space
+_BETA = np.pi ** (5.0 / 6.0) / 6.0 ** (1.0 / 6.0) / 2.0  # @private - Parameter for conversion to/from cubochoric space
+_R1 = (3.0 * np.pi / 4.0) ** (1.0 / 3.0)  # @private - Parameter for conversion to/from cubochoric space
 
 
 def qu2om(qu):
@@ -72,13 +68,13 @@ def qu2om(qu):
     om = np.block(
         [
             qq + 2.0 * qu[..., 1:2] ** 2,
-            2.0 * (qu[..., 2:3] * qu[..., 1:2] - epsijk * qu[..., 0:1] * qu[..., 3:4]),
-            2.0 * (qu[..., 3:4] * qu[..., 1:2] + epsijk * qu[..., 0:1] * qu[..., 2:3]),
-            2.0 * (qu[..., 1:2] * qu[..., 2:3] + epsijk * qu[..., 0:1] * qu[..., 3:4]),
+            2.0 * (qu[..., 2:3] * qu[..., 1:2] - _EPSIJK * qu[..., 0:1] * qu[..., 3:4]),
+            2.0 * (qu[..., 3:4] * qu[..., 1:2] + _EPSIJK * qu[..., 0:1] * qu[..., 2:3]),
+            2.0 * (qu[..., 1:2] * qu[..., 2:3] + _EPSIJK * qu[..., 0:1] * qu[..., 3:4]),
             qq + 2.0 * qu[..., 2:3] ** 2,
-            2.0 * (qu[..., 3:4] * qu[..., 2:3] - epsijk * qu[..., 0:1] * qu[..., 1:2]),
-            2.0 * (qu[..., 1:2] * qu[..., 3:4] - epsijk * qu[..., 0:1] * qu[..., 2:3]),
-            2.0 * (qu[..., 2:3] * qu[..., 3:4] + epsijk * qu[..., 0:1] * qu[..., 1:2]),
+            2.0 * (qu[..., 3:4] * qu[..., 2:3] - _EPSIJK * qu[..., 0:1] * qu[..., 1:2]),
+            2.0 * (qu[..., 1:2] * qu[..., 3:4] - _EPSIJK * qu[..., 0:1] * qu[..., 2:3]),
+            2.0 * (qu[..., 2:3] * qu[..., 3:4] + _EPSIJK * qu[..., 0:1] * qu[..., 1:2]),
             qq + 2.0 * qu[..., 3:4] ** 2,
         ]
     ).reshape(qu.shape[:-1] + (3, 3))
@@ -107,7 +103,7 @@ def qu2eu(qu):
         np.block(
             [
                 np.arctan2(
-                    -epsijk * 2.0 * qu[..., 0:1] * qu[..., 3:4],
+                    -_EPSIJK * 2.0 * qu[..., 0:1] * qu[..., 3:4],
                     qu[..., 0:1] ** 2 - qu[..., 3:4] ** 2,
                 ),
                 np.zeros(qu.shape[:-1] + (2,)),
@@ -126,9 +122,9 @@ def qu2eu(qu):
             ),
             np.block(
                 [
-                    np.arctan2((-epsijk * q02 + q13) * chi, (-epsijk * q01 - q23) * chi),
+                    np.arctan2((-_EPSIJK * q02 + q13) * chi, (-_EPSIJK * q01 - q23) * chi),
                     np.arctan2(2.0 * chi, q03_s - q12_s),
-                    np.arctan2((epsijk * q02 + q13) * chi, (-epsijk * q01 + q23) * chi),
+                    np.arctan2((_EPSIJK * q02 + q13) * chi, (-_EPSIJK * q01 + q23) * chi),
                 ]
             ),
         ),
@@ -197,7 +193,7 @@ def qu2ro(qu):
                 ]
             ),
         )
-    ro[np.abs(s).squeeze(-1) < 1.0e-12] = [0.0, 0.0, epsijk, 0.0]
+    ro[np.abs(s).squeeze(-1) < 1.0e-12] = [0.0, 0.0, _EPSIJK, 0.0]
     return ro
 
 
@@ -299,7 +295,7 @@ def om2qu(om):
                     ),
                 ),
             ),
-        ) * np.array([1, epsijk, epsijk, epsijk])
+        ) * np.array([1, _EPSIJK, _EPSIJK, _EPSIJK])
         qu[qu[..., 0] < 0] *= -1
     return qu
 
@@ -348,7 +344,7 @@ def om2ax(om):
         omega in radians.
     """
     # return qu2ax(om2qu(om)) # HOTFIX
-    diag_delta = -epsijk * np.block(
+    diag_delta = -_EPSIJK * np.block(
         [
             om[..., 1, 2:3] - om[..., 2, 1:2],
             om[..., 2, 0:1] - om[..., 0, 2:3],
@@ -426,9 +422,9 @@ def eu2qu(eu):
     qu = np.block(
         [
             cPhi * np.cos(ee[..., 0:1] + ee[..., 2:3]),
-            -epsijk * sPhi * np.cos(ee[..., 0:1] - ee[..., 2:3]),
-            -epsijk * sPhi * np.sin(ee[..., 0:1] - ee[..., 2:3]),
-            -epsijk * cPhi * np.sin(ee[..., 0:1] + ee[..., 2:3]),
+            -_EPSIJK * sPhi * np.cos(ee[..., 0:1] - ee[..., 2:3]),
+            -_EPSIJK * sPhi * np.sin(ee[..., 0:1] - ee[..., 2:3]),
+            -_EPSIJK * cPhi * np.sin(ee[..., 0:1] + ee[..., 2:3]),
         ]
     )
     qu[qu[..., 0] < 0.0] *= -1
@@ -484,9 +480,9 @@ def eu2ax(eu):
             [0.0, 0.0, 1.0, 0.0],
             np.block(
                 [
-                    -epsijk / tau * t * np.cos(delta),
-                    -epsijk / tau * t * np.sin(delta),
-                    -epsijk / tau * np.sin(sigma),
+                    -_EPSIJK / tau * t * np.cos(delta),
+                    -_EPSIJK / tau * t * np.sin(delta),
+                    -_EPSIJK / tau * np.sin(sigma),
                     alpha,
                 ]
             ),
@@ -507,7 +503,7 @@ def eu2ro(eu):
     ax = eu2ax(eu)
     ro = np.block([ax[..., :3], np.tan(ax[..., 3:4] * 0.5)])
     ro[ax[..., 3] >= np.pi, 3] = np.inf
-    ro[np.abs(ax[..., 3]) < 1.0e-16] = [0.0, 0.0, epsijk, 0.0]
+    ro[np.abs(ax[..., 3]) < 1.0e-16] = [0.0, 0.0, _EPSIJK, 0.0]
     return ro
 
 
@@ -580,7 +576,7 @@ def ax2om(ax):
             c + omc * ax[..., 2:3] ** 2,
         ]
     ).reshape(ax.shape[:-1] + (3, 3))
-    return om if epsijk < 0.0 else np.swapaxes(om, -1, -2)
+    return om if _EPSIJK < 0.0 else np.swapaxes(om, -1, -2)
 
 
 def ax2eu(ax):
@@ -614,7 +610,7 @@ def ax2ro(ax):
             ),
         ]
     )
-    ro[np.abs(ax[..., 3]) < 1.0e-6] = [0.0, 0.0, epsijk, 0.0]
+    ro[np.abs(ax[..., 3]) < 1.0e-6] = [0.0, 0.0, _EPSIJK, 0.0]
     return ro
 
 
@@ -864,7 +860,7 @@ def ho2cu(ho):
 
         q2 = qxy + np.max(np.abs(xyz2), axis=-1, keepdims=True) ** 2
         sq2 = np.sqrt(q2)
-        q = (beta / np.sqrt(2.0) / R1) * np.sqrt(
+        q = (_BETA / np.sqrt(2.0) / _R1) * np.sqrt(
             q2 * qxy / (q2 - np.max(np.abs(xyz2), axis=-1, keepdims=True) * sq2)
         )
         tt = np.clip(
@@ -900,7 +896,7 @@ def ho2cu(ho):
                     / np.sqrt(6.0 / np.pi),
                 ]
             )
-            / sc
+            / _SC
         )
 
     cu[np.isclose(np.sum(np.abs(ho), axis=-1), 0.0, rtol=0.0, atol=1.0e-16)] = 0.0
@@ -988,7 +984,7 @@ def cu2ho(cu):
     """
     with np.errstate(invalid="ignore", divide="ignore"):
         # get pyramide and scale by grid parameter ratio
-        XYZ = np.take_along_axis(cu, _get_pyramid_order(cu, "forward"), -1) * sc
+        XYZ = np.take_along_axis(cu, _get_pyramid_order(cu, "forward"), -1) * _SC
         order = np.abs(XYZ[..., 1:2]) <= np.abs(XYZ[..., 0:1])
         q = (
             np.pi
@@ -999,9 +995,9 @@ def cu2ho(cu):
         c = np.cos(q)
         s = np.sin(q)
         q = (
-            R1
+            _R1
             * 2.0**0.25
-            / beta
+            / _BETA
             / np.sqrt(np.sqrt(2.0) - c)
             * np.where(order, XYZ[..., 0:1], XYZ[..., 1:2])
         )

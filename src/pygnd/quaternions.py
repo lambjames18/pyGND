@@ -22,7 +22,7 @@ https://github.com/facebookresearch/pynp3d
 
 import numpy as np
 from tqdm import tqdm
-from pygnd.rotations import epsijk
+from pygnd.rotations import _EPSIJK
 from joblib import Parallel, delayed
 
 
@@ -132,9 +132,9 @@ def qu_prod_raw(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 
     ow = aw * bw - ax * bx - (ay * by + az * bz)
     ow = aw * bw - ax * bx - (ay * by + az * bz)
-    ox = aw * bx + ax * bw + epsijk * (ay * bz - az * by)
-    oy = aw * by + ay * bw + epsijk * (az * bx - ax * bz)
-    oz = aw * bz + az * bw + epsijk * (ax * by - ay * bx)
+    ox = aw * bx + ax * bw + _EPSIJK * (ay * bz - az * by)
+    oy = aw * by + ay * bw + _EPSIJK * (az * bx - ax * bz)
+    oz = aw * bz + az * bw + _EPSIJK * (ax * by - ay * bx)
 
     return np.stack((ow, ox, oy, oz), -1)
 
@@ -168,9 +168,9 @@ def qu_prod_axis(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     """
     aw, ax, ay, az = a[..., 0], a[..., 1], a[..., 2], a[..., 3]
     bw, bx, by, bz = b[..., 0], b[..., 1], b[..., 2], b[..., 3]
-    ox = aw * bx + ax * bw + epsijk * ay * bz - epsijk * az * by
-    oy = aw * by - epsijk * ax * bz + ay * bw + epsijk * az * bx
-    oz = aw * bz + epsijk * ax * by - epsijk * ay * bx + az * bw
+    ox = aw * bx + ax * bw + _EPSIJK * ay * bz - _EPSIJK * az * by
+    oy = aw * by - _EPSIJK * ax * bz + ay * bw + _EPSIJK * az * bx
+    oz = aw * bz + _EPSIJK * ax * by - _EPSIJK * ay * bx + az * bw
 
     return np.stack((ox, oy, oz), -1)
 
