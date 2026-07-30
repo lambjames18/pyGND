@@ -7,7 +7,7 @@
 [![Pylint](https://img.shields.io/endpoint?url=https%3A%2F%2Flambjames18.github.io%2FpyGND%2Fbadges%2Fpylint.json)](https://lambjames18.github.io/pyGND/badges/pylint.json)
 [![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Flambjames18.github.io%2FpyGND%2Fbadges%2Fcoverage.json)](https://lambjames18.github.io/pyGND/badges/coverage.json)
 [![Docs](https://img.shields.io/badge/docs-pdoc-blue)](https://lambjames18.github.io/pyGND/api/)
-[![CI](https://github.com/lambjames18/pyGND/actions/workflows/ci.yml/badge.svg)](https://github.com/lambjames18/pyGND/actions/workflows/ci.yml)
+[![CI](https://github.com/lambjames18/pyGND/actions/workflows/cicd.yml/badge.svg)](https://github.com/lambjames18/pyGND/actions/workflows/cicd.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
