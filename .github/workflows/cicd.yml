@@ -30,7 +30,7 @@ jobs:
 
     steps:
       - name: Announce workflow file
-        run: echo "Workflow file: ${{ github.workflow_ref }}"
+        run: echo "Workflow file ${{ github.workflow_ref }}"
 
       - name: Checkout code
         uses: actions/checkout@v4
