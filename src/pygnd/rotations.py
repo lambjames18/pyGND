@@ -482,7 +482,7 @@ def ro2ax(ro):
             np.isfinite(ro[..., 3:4]),
             np.block(
                 [
-                    ro[..., 0:3] * np.linalg.norm(ro[..., 0:3], axis=-1, keepdims=True),
+                    ro[..., 0:3] / np.linalg.norm(ro[..., 0:3], axis=-1, keepdims=True),
                     2.0 * np.arctan(ro[..., 3:4]),
                 ]
             ),
