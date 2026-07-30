@@ -1,5 +1,7 @@
 # PyGND
 
+### THIS CODE IS UNDER ACTIVE DEVELOPMENT
+
 **Geometrically Necessary Dislocation calculations for TriBeam 3D microstructures**
 
 [![Pylint](https://img.shields.io/endpoint?url=https%3A%2F%2FPollockGroup.github.io%2FTriBeam_GND%2Fbadges%2Fpylint.json)](https://PollockGroup.github.io/TriBeam_GND/badges/pylint.json)
