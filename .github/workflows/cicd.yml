@@ -138,7 +138,7 @@ jobs:
           python .github/scripts/make_badges.py
 
       - name: Build API docs with pdoc
-        run: uv run pdoc ${{ env.PACKAGE_IMPORT }} -o site/api
+        run: uv run pdoc ${{ env.PACKAGE_IMPORT }} -d google -o site/api
 
       - name: Add simple landing page
         run: |

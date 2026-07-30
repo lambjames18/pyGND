@@ -231,7 +231,7 @@ class TestPrecisionConstant:
 
     def test_precision_is_float32(self):
         """Test that PRECISION is set to float32."""
-        assert core.PRECISION == np.float32
+        assert core._PRECISION == np.float32
 
 
 class TestMatrixProperties:

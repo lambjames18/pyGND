@@ -5,7 +5,7 @@
 **Geometrically Necessary Dislocation calculations for TriBeam 3D microstructures**
 
 [![Pylint](https://img.shields.io/endpoint?url=https%3A%2F%2Flambjames18.github.io%2FpyGND%2Fbadges%2Fpylint.json)](https://lambjames18.github.io/pyGND/badges/pylint.json)
-[![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Flambjames18.github.io%2FpyGND%2Fbadges%2Fcoverage.json)](https://lambjames18.github.io/pyGND/badges/coverage.json)
+[![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Flambjames18.github.io%2FpyGND%2Fbadges%2Fcoverage.json)](https://lambjames18.github.io/pyGND/coverage/)
 [![Docs](https://img.shields.io/badge/docs-pdoc-blue)](https://lambjames18.github.io/pyGND/api/)
 [![CI](https://github.com/lambjames18/pyGND/actions/workflows/cicd.yml/badge.svg)](https://github.com/lambjames18/pyGND/actions/workflows/cicd.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)

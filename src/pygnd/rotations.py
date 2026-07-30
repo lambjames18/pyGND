@@ -26,33 +26,55 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 # USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ####################################################################################################
+"""Conversions between rotation/orientation representations used for EBSD crystallography data.
 
-# Note: An object oriented approach to use this conversions is available in DAMASK, see
-# https://damask.mpie.de and https://github.com/eisenforschung/DAMASK
+Every function follows the naming convention `x2y`, converting representation
+`x` to representation `y`. The representations, and the array shape each uses,
+are:
+
+- `qu` - quaternion, shape `(..., 4)`, in the form `(w, x, y, z)`.
+- `om` - rotation/orientation matrix, shape `(..., 3, 3)`.
+- `eu` - Bunge-Euler angles, shape `(..., 3)`, in the form `(phi1, Phi, phi2)`, in radians.
+- `ax` - axis-angle pair, shape `(..., 4)`: a unit rotation axis followed by the
+  rotation angle in radians, in the form `(n1, n2, n3, omega)`.
+- `ro` - Rodrigues-Frank vector, shape `(..., 4)`: a unit rotation axis followed
+  by `tan(omega / 2)` (which is `inf` for a 180 degree rotation), in the form
+  `(n1, n2, n3, tan(omega / 2))`.
+- `ho` - homochoric vector, shape `(..., 3)`.
+- `cu` - cubochoric vector, shape `(..., 3)`.
+
+"""
 
 import numpy as np
 
-epsijk = 1
 
-# parameters for conversion from/to cubochoric
-sc = np.pi ** (1.0 / 6.0) / 6.0 ** (1.0 / 6.0)
-beta = np.pi ** (5.0 / 6.0) / 6.0 ** (1.0 / 6.0) / 2.0
-R1 = (3.0 * np.pi / 4.0) ** (1.0 / 3.0)
-# ---------- Quaternion ----------
+_EPSIJK = 1  # @private - Convention for the sign of the Levi-Civita symbol used throughout these conversions
+
+_SC = np.pi ** (1.0 / 6.0) / 6.0 ** (1.0 / 6.0)  # @private - Parameter for conversion to/from cubochoric space
+_BETA = np.pi ** (5.0 / 6.0) / 6.0 ** (1.0 / 6.0) / 2.0  # @private - Parameter for conversion to/from cubochoric space
+_R1 = (3.0 * np.pi / 4.0) ** (1.0 / 3.0)  # @private - Parameter for conversion to/from cubochoric space
 
 
 def qu2om(qu):
+    """Quaternion to rotation matrix.
+
+    Args:
+        qu: shape (..., 4) quaternions in the form (w, x, y, z).
+
+    Returns:
+        np.ndarray of shape (..., 3, 3): rotation matrices.
+    """
     qq = qu[..., 0:1] ** 2 - (qu[..., 1:2] ** 2 + qu[..., 2:3] ** 2 + qu[..., 3:4] ** 2)
     om = np.block(
         [
             qq + 2.0 * qu[..., 1:2] ** 2,
-            2.0 * (qu[..., 2:3] * qu[..., 1:2] - epsijk * qu[..., 0:1] * qu[..., 3:4]),
-            2.0 * (qu[..., 3:4] * qu[..., 1:2] + epsijk * qu[..., 0:1] * qu[..., 2:3]),
-            2.0 * (qu[..., 1:2] * qu[..., 2:3] + epsijk * qu[..., 0:1] * qu[..., 3:4]),
+            2.0 * (qu[..., 2:3] * qu[..., 1:2] - _EPSIJK * qu[..., 0:1] * qu[..., 3:4]),
+            2.0 * (qu[..., 3:4] * qu[..., 1:2] + _EPSIJK * qu[..., 0:1] * qu[..., 2:3]),
+            2.0 * (qu[..., 1:2] * qu[..., 2:3] + _EPSIJK * qu[..., 0:1] * qu[..., 3:4]),
             qq + 2.0 * qu[..., 2:3] ** 2,
-            2.0 * (qu[..., 3:4] * qu[..., 2:3] - epsijk * qu[..., 0:1] * qu[..., 1:2]),
-            2.0 * (qu[..., 1:2] * qu[..., 3:4] - epsijk * qu[..., 0:1] * qu[..., 2:3]),
-            2.0 * (qu[..., 2:3] * qu[..., 3:4] + epsijk * qu[..., 0:1] * qu[..., 1:2]),
+            2.0 * (qu[..., 3:4] * qu[..., 2:3] - _EPSIJK * qu[..., 0:1] * qu[..., 1:2]),
+            2.0 * (qu[..., 1:2] * qu[..., 3:4] - _EPSIJK * qu[..., 0:1] * qu[..., 2:3]),
+            2.0 * (qu[..., 2:3] * qu[..., 3:4] + _EPSIJK * qu[..., 0:1] * qu[..., 1:2]),
             qq + 2.0 * qu[..., 3:4] ** 2,
         ]
     ).reshape(qu.shape[:-1] + (3, 3))
@@ -60,7 +82,14 @@ def qu2om(qu):
 
 
 def qu2eu(qu):
-    """Quaternion to Bunge-Euler angles."""
+    """Quaternion to Bunge-Euler angles.
+
+    Args:
+        qu: shape (..., 4) quaternions in the form (w, x, y, z).
+
+    Returns:
+        np.ndarray of shape (..., 3): Bunge-Euler angles (phi1, Phi, phi2) in radians.
+    """
     q02 = qu[..., 0:1] * qu[..., 2:3]
     q13 = qu[..., 1:2] * qu[..., 3:4]
     q01 = qu[..., 0:1] * qu[..., 1:2]
@@ -74,7 +103,7 @@ def qu2eu(qu):
         np.block(
             [
                 np.arctan2(
-                    -epsijk * 2.0 * qu[..., 0:1] * qu[..., 3:4],
+                    -_EPSIJK * 2.0 * qu[..., 0:1] * qu[..., 3:4],
                     qu[..., 0:1] ** 2 - qu[..., 3:4] ** 2,
                 ),
                 np.zeros(qu.shape[:-1] + (2,)),
@@ -93,9 +122,9 @@ def qu2eu(qu):
             ),
             np.block(
                 [
-                    np.arctan2((-epsijk * q02 + q13) * chi, (-epsijk * q01 - q23) * chi),
+                    np.arctan2((-_EPSIJK * q02 + q13) * chi, (-_EPSIJK * q01 - q23) * chi),
                     np.arctan2(2.0 * chi, q03_s - q12_s),
-                    np.arctan2((epsijk * q02 + q13) * chi, (-epsijk * q01 + q23) * chi),
+                    np.arctan2((_EPSIJK * q02 + q13) * chi, (-_EPSIJK * q01 + q23) * chi),
                 ]
             ),
         ),
@@ -109,10 +138,16 @@ def qu2eu(qu):
 
 
 def qu2ax(qu):
-    """
-    Quaternion to axis angle pair.
+    """Quaternion to axis-angle pair.
 
-    Modified version of the original formulation, should be numerically more stable
+    Modified version of the original formulation, should be numerically more stable.
+
+    Args:
+        qu: shape (..., 4) quaternions in the form (w, x, y, z).
+
+    Returns:
+        np.ndarray of shape (..., 4): axis-angle pairs (n1, n2, n3, omega), with
+        omega in radians.
     """
     with np.errstate(invalid="ignore", divide="ignore"):
         s = np.sign(qu[..., 0:1]) / np.sqrt(
@@ -129,7 +164,14 @@ def qu2ax(qu):
 
 
 def qu2ro(qu):
-    """Quaternion to Rodrigues-Frank vector."""
+    """Quaternion to Rodrigues-Frank vector.
+
+    Args:
+        qu: shape (..., 4) quaternions in the form (w, x, y, z).
+
+    Returns:
+        np.ndarray of shape (..., 4): Rodrigues-Frank vectors (n1, n2, n3, tan(omega / 2)).
+    """
     with np.errstate(invalid="ignore", divide="ignore"):
         s = np.linalg.norm(qu[..., 1:4], axis=-1, keepdims=True)
         ro = np.where(
@@ -151,12 +193,19 @@ def qu2ro(qu):
                 ]
             ),
         )
-    ro[np.abs(s).squeeze(-1) < 1.0e-12] = [0.0, 0.0, epsijk, 0.0]
+    ro[np.abs(s).squeeze(-1) < 1.0e-12] = [0.0, 0.0, _EPSIJK, 0.0]
     return ro
 
 
 def qu2ho(qu):
-    """Quaternion to homochoric vector."""
+    """Quaternion to homochoric vector.
+
+    Args:
+        qu: shape (..., 4) quaternions in the form (w, x, y, z).
+
+    Returns:
+        np.ndarray of shape (..., 3): homochoric vectors.
+    """
     with np.errstate(invalid="ignore"):
         omega = 2.0 * np.arccos(np.clip(qu[..., 0:1], -1.0, 1.0))
         ho = np.where(
@@ -170,7 +219,14 @@ def qu2ho(qu):
 
 
 def qu2cu(qu):
-    """Quaternion to cubochoric vector."""
+    """Quaternion to cubochoric vector.
+
+    Args:
+        qu: shape (..., 4) quaternions in the form (w, x, y, z).
+
+    Returns:
+        np.ndarray of shape (..., 3): cubochoric vectors.
+    """
     return ho2cu(qu2ho(qu))
 
 
@@ -178,11 +234,17 @@ def qu2cu(qu):
 
 
 def om2qu(om):
-    """
-    Rotation matrix to quaternion.
+    """Rotation matrix to quaternion.
 
-    This formulation is from  www.euclideanspace.com/maths/geometry/rotations/conversions/matrixToQuaternion.
+    This formulation is from
+    www.euclideanspace.com/maths/geometry/rotations/conversions/matrixToQuaternion.
     The original formulation had issues.
+
+    Args:
+        om: shape (..., 3, 3) rotation matrices.
+
+    Returns:
+        np.ndarray of shape (..., 4): quaternions in the form (w, x, y, z).
     """
     trace = om[..., 0, 0:1] + om[..., 1, 1:2] + om[..., 2, 2:3]
 
@@ -233,13 +295,20 @@ def om2qu(om):
                     ),
                 ),
             ),
-        ) * np.array([1, epsijk, epsijk, epsijk])
+        ) * np.array([1, _EPSIJK, _EPSIJK, _EPSIJK])
         qu[qu[..., 0] < 0] *= -1
     return qu
 
 
 def om2eu(om):
-    """Rotation matrix to Bunge-Euler angles."""
+    """Rotation matrix to Bunge-Euler angles.
+
+    Args:
+        om: shape (..., 3, 3) rotation matrices.
+
+    Returns:
+        np.ndarray of shape (..., 3): Bunge-Euler angles (phi1, Phi, phi2) in radians.
+    """
     with np.errstate(invalid="ignore", divide="ignore"):
         zeta = 1.0 / np.sqrt(1.0 - om[..., 2, 2:3] ** 2)
         eu = np.where(
@@ -265,9 +334,17 @@ def om2eu(om):
 
 
 def om2ax(om):
-    """Rotation matrix to axis angle pair."""
+    """Rotation matrix to axis-angle pair.
+
+    Args:
+        om: shape (..., 3, 3) rotation matrices.
+
+    Returns:
+        np.ndarray of shape (..., 4): axis-angle pairs (n1, n2, n3, omega), with
+        omega in radians.
+    """
     # return qu2ax(om2qu(om)) # HOTFIX
-    diag_delta = -epsijk * np.block(
+    diag_delta = -_EPSIJK * np.block(
         [
             om[..., 1, 2:3] - om[..., 2, 1:2],
             om[..., 2, 0:1] - om[..., 0, 2:3],
@@ -292,17 +369,38 @@ def om2ax(om):
 
 
 def om2ro(om):
-    """Rotation matrix to Rodrigues-Frank vector."""
+    """Rotation matrix to Rodrigues-Frank vector.
+
+    Args:
+        om: shape (..., 3, 3) rotation matrices.
+
+    Returns:
+        np.ndarray of shape (..., 4): Rodrigues-Frank vectors (n1, n2, n3, tan(omega / 2)).
+    """
     return eu2ro(om2eu(om))
 
 
 def om2ho(om):
-    """Rotation matrix to homochoric vector."""
+    """Rotation matrix to homochoric vector.
+
+    Args:
+        om: shape (..., 3, 3) rotation matrices.
+
+    Returns:
+        np.ndarray of shape (..., 3): homochoric vectors.
+    """
     return ax2ho(om2ax(om))
 
 
 def om2cu(om):
-    """Rotation matrix to cubochoric vector."""
+    """Rotation matrix to cubochoric vector.
+
+    Args:
+        om: shape (..., 3, 3) rotation matrices.
+
+    Returns:
+        np.ndarray of shape (..., 3): cubochoric vectors.
+    """
     return ho2cu(om2ho(om))
 
 
@@ -310,16 +408,23 @@ def om2cu(om):
 
 
 def eu2qu(eu):
-    """Bunge-Euler angles to quaternion."""
+    """Bunge-Euler angles to quaternion.
+
+    Args:
+        eu: shape (..., 3) Bunge-Euler angles (phi1, Phi, phi2) in radians.
+
+    Returns:
+        np.ndarray of shape (..., 4): quaternions in the form (w, x, y, z).
+    """
     ee = 0.5 * eu
     cPhi = np.cos(ee[..., 1:2])
     sPhi = np.sin(ee[..., 1:2])
     qu = np.block(
         [
             cPhi * np.cos(ee[..., 0:1] + ee[..., 2:3]),
-            -epsijk * sPhi * np.cos(ee[..., 0:1] - ee[..., 2:3]),
-            -epsijk * sPhi * np.sin(ee[..., 0:1] - ee[..., 2:3]),
-            -epsijk * cPhi * np.sin(ee[..., 0:1] + ee[..., 2:3]),
+            -_EPSIJK * sPhi * np.cos(ee[..., 0:1] - ee[..., 2:3]),
+            -_EPSIJK * sPhi * np.sin(ee[..., 0:1] - ee[..., 2:3]),
+            -_EPSIJK * cPhi * np.sin(ee[..., 0:1] + ee[..., 2:3]),
         ]
     )
     qu[qu[..., 0] < 0.0] *= -1
@@ -327,7 +432,14 @@ def eu2qu(eu):
 
 
 def eu2om(eu):
-    """Bunge-Euler angles to rotation matrix."""
+    """Bunge-Euler angles to rotation matrix.
+
+    Args:
+        eu: shape (..., 3) Bunge-Euler angles (phi1, Phi, phi2) in radians.
+
+    Returns:
+        np.ndarray of shape (..., 3, 3): rotation matrices.
+    """
     c = np.cos(eu)
     s = np.sin(eu)
     om = np.block(
@@ -348,7 +460,15 @@ def eu2om(eu):
 
 
 def eu2ax(eu):
-    """Bunge-Euler angles to axis angle pair."""
+    """Bunge-Euler angles to axis-angle pair.
+
+    Args:
+        eu: shape (..., 3) Bunge-Euler angles (phi1, Phi, phi2) in radians.
+
+    Returns:
+        np.ndarray of shape (..., 4): axis-angle pairs (n1, n2, n3, omega), with
+        omega in radians.
+    """
     t = np.tan(eu[..., 1:2] * 0.5)
     sigma = 0.5 * (eu[..., 0:1] + eu[..., 2:3])
     delta = 0.5 * (eu[..., 0:1] - eu[..., 2:3])
@@ -360,9 +480,9 @@ def eu2ax(eu):
             [0.0, 0.0, 1.0, 0.0],
             np.block(
                 [
-                    -epsijk / tau * t * np.cos(delta),
-                    -epsijk / tau * t * np.sin(delta),
-                    -epsijk / tau * np.sin(sigma),
+                    -_EPSIJK / tau * t * np.cos(delta),
+                    -_EPSIJK / tau * t * np.sin(delta),
+                    -_EPSIJK / tau * np.sin(sigma),
                     alpha,
                 ]
             ),
@@ -372,21 +492,42 @@ def eu2ax(eu):
 
 
 def eu2ro(eu):
-    """Bunge-Euler angles to Rodrigues-Frank vector."""
+    """Bunge-Euler angles to Rodrigues-Frank vector.
+
+    Args:
+        eu: shape (..., 3) Bunge-Euler angles (phi1, Phi, phi2) in radians.
+
+    Returns:
+        np.ndarray of shape (..., 4): Rodrigues-Frank vectors (n1, n2, n3, tan(omega / 2)).
+    """
     ax = eu2ax(eu)
     ro = np.block([ax[..., :3], np.tan(ax[..., 3:4] * 0.5)])
     ro[ax[..., 3] >= np.pi, 3] = np.inf
-    ro[np.abs(ax[..., 3]) < 1.0e-16] = [0.0, 0.0, epsijk, 0.0]
+    ro[np.abs(ax[..., 3]) < 1.0e-16] = [0.0, 0.0, _EPSIJK, 0.0]
     return ro
 
 
 def eu2ho(eu):
-    """Bunge-Euler angles to homochoric vector."""
+    """Bunge-Euler angles to homochoric vector.
+
+    Args:
+        eu: shape (..., 3) Bunge-Euler angles (phi1, Phi, phi2) in radians.
+
+    Returns:
+        np.ndarray of shape (..., 3): homochoric vectors.
+    """
     return ax2ho(eu2ax(eu))
 
 
 def eu2cu(eu):
-    """Bunge-Euler angles to cubochoric vector."""
+    """Bunge-Euler angles to cubochoric vector.
+
+    Args:
+        eu: shape (..., 3) Bunge-Euler angles (phi1, Phi, phi2) in radians.
+
+    Returns:
+        np.ndarray of shape (..., 3): cubochoric vectors.
+    """
     return ho2cu(eu2ho(eu))
 
 
@@ -394,7 +535,14 @@ def eu2cu(eu):
 
 
 def ax2qu(ax):
-    """Axis angle pair to quaternion."""
+    """Axis-angle pair to quaternion.
+
+    Args:
+        ax: shape (..., 4) axis-angle pairs (n1, n2, n3, omega), with omega in radians.
+
+    Returns:
+        np.ndarray of shape (..., 4): quaternions in the form (w, x, y, z).
+    """
     c = np.cos(ax[..., 3:4] * 0.5)
     s = np.sin(ax[..., 3:4] * 0.5)
     qu = np.where(
@@ -404,7 +552,14 @@ def ax2qu(ax):
 
 
 def ax2om(ax):
-    """Axis angle pair to rotation matrix."""
+    """Axis-angle pair to rotation matrix.
+
+    Args:
+        ax: shape (..., 4) axis-angle pairs (n1, n2, n3, omega), with omega in radians.
+
+    Returns:
+        np.ndarray of shape (..., 3, 3): rotation matrices.
+    """
     c = np.cos(ax[..., 3:4])
     s = np.sin(ax[..., 3:4])
     omc = 1.0 - c
@@ -421,16 +576,30 @@ def ax2om(ax):
             c + omc * ax[..., 2:3] ** 2,
         ]
     ).reshape(ax.shape[:-1] + (3, 3))
-    return om if epsijk < 0.0 else np.swapaxes(om, -1, -2)
+    return om if _EPSIJK < 0.0 else np.swapaxes(om, -1, -2)
 
 
 def ax2eu(ax):
-    """Rotation matrix to Bunge Euler angles."""
+    """Axis-angle pair to Bunge-Euler angles.
+
+    Args:
+        ax: shape (..., 4) axis-angle pairs (n1, n2, n3, omega), with omega in radians.
+
+    Returns:
+        np.ndarray of shape (..., 3): Bunge-Euler angles (phi1, Phi, phi2) in radians.
+    """
     return om2eu(ax2om(ax))
 
 
 def ax2ro(ax):
-    """Axis angle pair to Rodrigues-Frank vector."""
+    """Axis-angle pair to Rodrigues-Frank vector.
+
+    Args:
+        ax: shape (..., 4) axis-angle pairs (n1, n2, n3, omega), with omega in radians.
+
+    Returns:
+        np.ndarray of shape (..., 4): Rodrigues-Frank vectors (n1, n2, n3, tan(omega / 2)).
+    """
     ro = np.block(
         [
             ax[..., :3],
@@ -441,19 +610,33 @@ def ax2ro(ax):
             ),
         ]
     )
-    ro[np.abs(ax[..., 3]) < 1.0e-6] = [0.0, 0.0, epsijk, 0.0]
+    ro[np.abs(ax[..., 3]) < 1.0e-6] = [0.0, 0.0, _EPSIJK, 0.0]
     return ro
 
 
 def ax2ho(ax):
-    """Axis angle pair to homochoric vector."""
+    """Axis-angle pair to homochoric vector.
+
+    Args:
+        ax: shape (..., 4) axis-angle pairs (n1, n2, n3, omega), with omega in radians.
+
+    Returns:
+        np.ndarray of shape (..., 3): homochoric vectors.
+    """
     f = (0.75 * (ax[..., 3:4] - np.sin(ax[..., 3:4]))) ** (1.0 / 3.0)
     ho = ax[..., :3] * f
     return ho
 
 
 def ax2cu(ax):
-    """Axis angle pair to cubochoric vector."""
+    """Axis-angle pair to cubochoric vector.
+
+    Args:
+        ax: shape (..., 4) axis-angle pairs (n1, n2, n3, omega), with omega in radians.
+
+    Returns:
+        np.ndarray of shape (..., 3): cubochoric vectors.
+    """
     return ho2cu(ax2ho(ax))
 
 
@@ -461,22 +644,51 @@ def ax2cu(ax):
 
 
 def ro2qu(ro):
-    """Rodrigues-Frank vector to quaternion."""
+    """Rodrigues-Frank vector to quaternion.
+
+    Args:
+        ro: shape (..., 4) Rodrigues-Frank vectors (n1, n2, n3, tan(omega / 2)).
+
+    Returns:
+        np.ndarray of shape (..., 4): quaternions in the form (w, x, y, z).
+    """
     return ax2qu(ro2ax(ro))
 
 
 def ro2om(ro):
-    """Rodgrigues-Frank vector to rotation matrix."""
+    """Rodrigues-Frank vector to rotation matrix.
+
+    Args:
+        ro: shape (..., 4) Rodrigues-Frank vectors (n1, n2, n3, tan(omega / 2)).
+
+    Returns:
+        np.ndarray of shape (..., 3, 3): rotation matrices.
+    """
     return ax2om(ro2ax(ro))
 
 
 def ro2eu(ro):
-    """Rodrigues-Frank vector to Bunge-Euler angles."""
+    """Rodrigues-Frank vector to Bunge-Euler angles.
+
+    Args:
+        ro: shape (..., 4) Rodrigues-Frank vectors (n1, n2, n3, tan(omega / 2)).
+
+    Returns:
+        np.ndarray of shape (..., 3): Bunge-Euler angles (phi1, Phi, phi2) in radians.
+    """
     return om2eu(ro2om(ro))
 
 
 def ro2ax(ro):
-    """Rodrigues-Frank vector to axis angle pair."""
+    """Rodrigues-Frank vector to axis-angle pair.
+
+    Args:
+        ro: shape (..., 4) Rodrigues-Frank vectors (n1, n2, n3, tan(omega / 2)).
+
+    Returns:
+        np.ndarray of shape (..., 4): axis-angle pairs (n1, n2, n3, omega), with
+        omega in radians.
+    """
     with np.errstate(invalid="ignore", divide="ignore"):
         ax = np.where(
             np.isfinite(ro[..., 3:4]),
@@ -493,7 +705,14 @@ def ro2ax(ro):
 
 
 def ro2ho(ro):
-    """Rodrigues-Frank vector to homochoric vector."""
+    """Rodrigues-Frank vector to homochoric vector.
+
+    Args:
+        ro: shape (..., 4) Rodrigues-Frank vectors (n1, n2, n3, tan(omega / 2)).
+
+    Returns:
+        np.ndarray of shape (..., 3): homochoric vectors.
+    """
     f = np.where(
         np.isfinite(ro[..., 3:4]),
         2.0 * np.arctan(ro[..., 3:4]) - np.sin(2.0 * np.arctan(ro[..., 3:4])),
@@ -510,7 +729,14 @@ def ro2ho(ro):
 
 
 def ro2cu(ro):
-    """Rodrigues-Frank vector to cubochoric vector."""
+    """Rodrigues-Frank vector to cubochoric vector.
+
+    Args:
+        ro: shape (..., 4) Rodrigues-Frank vectors (n1, n2, n3, tan(omega / 2)).
+
+    Returns:
+        np.ndarray of shape (..., 3): cubochoric vectors.
+    """
     return ho2cu(ro2ho(ro))
 
 
@@ -518,22 +744,51 @@ def ro2cu(ro):
 
 
 def ho2qu(ho):
-    """Homochoric vector to quaternion."""
+    """Homochoric vector to quaternion.
+
+    Args:
+        ho: shape (..., 3) homochoric vectors.
+
+    Returns:
+        np.ndarray of shape (..., 4): quaternions in the form (w, x, y, z).
+    """
     return ax2qu(ho2ax(ho))
 
 
 def ho2om(ho):
-    """Homochoric vector to rotation matrix."""
+    """Homochoric vector to rotation matrix.
+
+    Args:
+        ho: shape (..., 3) homochoric vectors.
+
+    Returns:
+        np.ndarray of shape (..., 3, 3): rotation matrices.
+    """
     return ax2om(ho2ax(ho))
 
 
 def ho2eu(ho):
-    """Homochoric vector to Bunge-Euler angles."""
+    """Homochoric vector to Bunge-Euler angles.
+
+    Args:
+        ho: shape (..., 3) homochoric vectors.
+
+    Returns:
+        np.ndarray of shape (..., 3): Bunge-Euler angles (phi1, Phi, phi2) in radians.
+    """
     return ax2eu(ho2ax(ho))
 
 
 def ho2ax(ho):
-    """Homochoric vector to axis angle pair."""
+    """Homochoric vector to axis-angle pair.
+
+    Args:
+        ho: shape (..., 3) homochoric vectors.
+
+    Returns:
+        np.ndarray of shape (..., 4): axis-angle pairs (n1, n2, n3, omega), with
+        omega in radians.
+    """
     tfit = np.array(
         [
             +1.0000000000018852,
@@ -570,19 +825,29 @@ def ho2ax(ho):
 
 
 def ho2ro(ho):
-    """Axis angle pair to Rodrigues-Frank vector."""
+    """Homochoric vector to Rodrigues-Frank vector.
+
+    Args:
+        ho: shape (..., 3) homochoric vectors.
+
+    Returns:
+        np.ndarray of shape (..., 4): Rodrigues-Frank vectors (n1, n2, n3, tan(omega / 2)).
+    """
     return ax2ro(ho2ax(ho))
 
 
 def ho2cu(ho):
-    """
-    Homochoric vector to cubochoric vector.
+    """Homochoric vector to cubochoric vector.
 
-    References
-    ----------
-    D. Roşca et al., Modelling and Simulation in Materials Science and Engineering 22:075013, 2014
-    https://doi.org/10.1088/0965-0393/22/7/075013
+    Args:
+        ho: shape (..., 3) homochoric vectors.
 
+    Returns:
+        np.ndarray of shape (..., 3): cubochoric vectors.
+
+    References:
+        D. Roşca et al., Modelling and Simulation in Materials Science and
+        Engineering 22:075013, 2014. https://doi.org/10.1088/0965-0393/22/7/075013
     """
     rs = np.linalg.norm(ho, axis=-1, keepdims=True)
 
@@ -595,7 +860,7 @@ def ho2cu(ho):
 
         q2 = qxy + np.max(np.abs(xyz2), axis=-1, keepdims=True) ** 2
         sq2 = np.sqrt(q2)
-        q = (beta / np.sqrt(2.0) / R1) * np.sqrt(
+        q = (_BETA / np.sqrt(2.0) / _R1) * np.sqrt(
             q2 * qxy / (q2 - np.max(np.abs(xyz2), axis=-1, keepdims=True) * sq2)
         )
         tt = np.clip(
@@ -631,7 +896,7 @@ def ho2cu(ho):
                     / np.sqrt(6.0 / np.pi),
                 ]
             )
-            / sc
+            / _SC
         )
 
     cu[np.isclose(np.sum(np.abs(ho), axis=-1), 0.0, rtol=0.0, atol=1.0e-16)] = 0.0
@@ -644,43 +909,82 @@ def ho2cu(ho):
 
 
 def cu2qu(cu):
-    """Cubochoric vector to quaternion."""
+    """Cubochoric vector to quaternion.
+
+    Args:
+        cu: shape (..., 3) cubochoric vectors.
+
+    Returns:
+        np.ndarray of shape (..., 4): quaternions in the form (w, x, y, z).
+    """
     return ho2qu(cu2ho(cu))
 
 
 def cu2om(cu):
-    """Cubochoric vector to rotation matrix."""
+    """Cubochoric vector to rotation matrix.
+
+    Args:
+        cu: shape (..., 3) cubochoric vectors.
+
+    Returns:
+        np.ndarray of shape (..., 3, 3): rotation matrices.
+    """
     return ho2om(cu2ho(cu))
 
 
 def cu2eu(cu):
-    """Cubochoric vector to Bunge-Euler angles."""
+    """Cubochoric vector to Bunge-Euler angles.
+
+    Args:
+        cu: shape (..., 3) cubochoric vectors.
+
+    Returns:
+        np.ndarray of shape (..., 3): Bunge-Euler angles (phi1, Phi, phi2) in radians.
+    """
     return ho2eu(cu2ho(cu))
 
 
 def cu2ax(cu):
-    """Cubochoric vector to axis angle pair."""
+    """Cubochoric vector to axis-angle pair.
+
+    Args:
+        cu: shape (..., 3) cubochoric vectors.
+
+    Returns:
+        np.ndarray of shape (..., 4): axis-angle pairs (n1, n2, n3, omega), with
+        omega in radians.
+    """
     return ho2ax(cu2ho(cu))
 
 
 def cu2ro(cu):
-    """Cubochoric vector to Rodrigues-Frank vector."""
+    """Cubochoric vector to Rodrigues-Frank vector.
+
+    Args:
+        cu: shape (..., 3) cubochoric vectors.
+
+    Returns:
+        np.ndarray of shape (..., 4): Rodrigues-Frank vectors (n1, n2, n3, tan(omega / 2)).
+    """
     return ho2ro(cu2ho(cu))
 
 
 def cu2ho(cu):
-    """
-    Cubochoric vector to homochoric vector.
+    """Cubochoric vector to homochoric vector.
 
-    References
-    ----------
-    D. Roşca et al., Modelling and Simulation in Materials Science and Engineering 22:075013, 2014
-    https://doi.org/10.1088/0965-0393/22/7/075013
+    Args:
+        cu: shape (..., 3) cubochoric vectors.
 
+    Returns:
+        np.ndarray of shape (..., 3): homochoric vectors.
+
+    References:
+        D. Roşca et al., Modelling and Simulation in Materials Science and
+        Engineering 22:075013, 2014. https://doi.org/10.1088/0965-0393/22/7/075013
     """
     with np.errstate(invalid="ignore", divide="ignore"):
         # get pyramide and scale by grid parameter ratio
-        XYZ = np.take_along_axis(cu, _get_pyramid_order(cu, "forward"), -1) * sc
+        XYZ = np.take_along_axis(cu, _get_pyramid_order(cu, "forward"), -1) * _SC
         order = np.abs(XYZ[..., 1:2]) <= np.abs(XYZ[..., 0:1])
         q = (
             np.pi
@@ -691,9 +995,9 @@ def cu2ho(cu):
         c = np.cos(q)
         s = np.sin(q)
         q = (
-            R1
+            _R1
             * 2.0**0.25
-            / beta
+            / _BETA
             / np.sqrt(np.sqrt(2.0) - c)
             * np.where(order, XYZ[..., 0:1], XYZ[..., 1:2])
         )
@@ -727,22 +1031,23 @@ def cu2ho(cu):
 
 
 def _get_pyramid_order(xyz, direction=None):
-    """
-    Get order of the coordinates.
+    """Get the coordinate order for the cubochoric/homochoric pyramid transform.
 
-    Depending on the pyramid in which the point is located, the order need to be adjusted.
+    Depending on which of the six pyramids a point falls into, the coordinate
+    order needs to be cyclically permuted before (`"forward"`) and after
+    (`"backward"`) the transform.
 
-    Parameters
-    ----------
-    xyz : numpy.ndarray
-       coordinates of a point on a uniform refinable grid on a ball or
-       in a uniform refinable cubical grid.
+    Args:
+        xyz: shape (..., 3) coordinates of a point on a uniform refinable grid
+            on a ball, or in a uniform refinable cubical grid.
+        direction: either `"forward"` or `"backward"`.
 
-    References
-    ----------
-    D. Roşca et al., Modelling and Simulation in Materials Science and Engineering 22:075013, 2014
-    https://doi.org/10.1088/0965-0393/22/7/075013
+    Returns:
+        np.ndarray of shape (..., 3): the index order to apply via `np.take_along_axis`.
 
+    References:
+        D. Roşca et al., Modelling and Simulation in Materials Science and
+        Engineering 22:075013, 2014. https://doi.org/10.1088/0965-0393/22/7/075013
     """
     order = {
         "forward": np.array([[0, 1, 2], [1, 2, 0], [2, 0, 1]]),

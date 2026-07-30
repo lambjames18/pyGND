@@ -14,7 +14,7 @@ from pygnd.utils import tqdm_joblib
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
-PRECISION = np.float32
+_PRECISION = np.float32
 
 
 def _resolve_n_cpus(n_cpus: int) -> int:
@@ -69,8 +69,8 @@ def get_linear_operator(cs: int, slip_systems: str = "all") -> tuple[np.ndarray,
 
     # Create the A matrix for the given crystal structure
     if cs == 1:
-        a = np.sqrt(3).astype(PRECISION) / 9
-        c = np.sqrt(3).astype(PRECISION) / 84
+        a = np.sqrt(3).astype(_PRECISION) / 9
+        c = np.sqrt(3).astype(_PRECISION) / 84
         d = 1 / 18
         f = 3 / 14
 
@@ -96,7 +96,7 @@ def get_linear_operator(cs: int, slip_systems: str = "all") -> tuple[np.ndarray,
                 [5 * d, 0, -f, 0, -d, 0, -f, 0, 5 * d],
                 [-d, 0, 0, 0, 5 * d, -f, 0, -f, 5 * d],
             ]
-        ).astype(PRECISION)
+        ).astype(_PRECISION)
 
         # FCC
         A = pseudo_inverse(B)
@@ -292,7 +292,7 @@ def pseudo_inverse(A: np.ndarray) -> np.ndarray:
         np.ndarray: The B matrix. Shape (n_slip_systems, 9)
     """
     # return A.T.dot(np.linalg.inv(A.dot(A.T))).astype(PRECISION)
-    return np.linalg.pinv(A).astype(PRECISION)
+    return np.linalg.pinv(A).astype(_PRECISION)
 
 
 def get_completeness(grain_ids: np.ndarray) -> np.ndarray:
@@ -389,7 +389,7 @@ def get_neighbors(completeness: np.ndarray) -> np.ndarray:
     # Create coordinate shifts for the pairs and the scale for the finite difference calculation
     shifts0 = np.zeros((3,) + shape + (3,), dtype=np.int32)
     shifts1 = np.zeros((3,) + shape + (3,), dtype=np.int32)
-    scale = np.zeros(shape + (3,), dtype=PRECISION)
+    scale = np.zeros(shape + (3,), dtype=_PRECISION)
 
     # Only central and backward differences will have a shift in the first point
     shifts0[0][(completeness[..., 0] == 2) | (completeness[..., 0] == 3)] = [-1, 0, 0]
@@ -484,7 +484,7 @@ def get_orientation_gradients(
     out_shape = quats.shape[:-1]
 
     # Reshape the data to be 1D
-    quats = quats.reshape(-1, 4).astype(PRECISION)
+    quats = quats.reshape(-1, 4).astype(_PRECISION)
     N = quats.shape[0]
     pts0 = pts0.reshape(-1, 3, 3)
     pts1 = pts1.reshape(-1, 3, 3)
@@ -512,12 +512,12 @@ def get_orientation_gradients(
     q0 = np.stack(
         [quats[pts0[:, 0]], quats[pts0[:, 1]], quats[pts0[:, 2]]],
         axis=1,
-        dtype=PRECISION,
+        dtype=_PRECISION,
     )  # (n_pairs, 3, 4)
     q1 = np.stack(
         [quats[pts1[:, 0]], quats[pts1[:, 1]], quats[pts1[:, 2]]],
         axis=1,
-        dtype=PRECISION,
+        dtype=_PRECISION,
     )  # (n_pairs, 3, 4)
     del quats, pts0, pts1  # Free memory
 
@@ -541,7 +541,7 @@ def get_orientation_gradients(
         chunks = zip(q0, q1)
 
         # Run the calculations in parallel
-        quats_disorientation = np.empty((N, 3, 4), dtype=PRECISION)
+        quats_disorientation = np.empty((N, 3, 4), dtype=_PRECISION)
         if progress_bar:
             with tqdm_joblib(
                 tqdm(total=n_chunks, desc="Calculating orientation gradients")
@@ -605,102 +605,6 @@ def _minimize_l2(Lambda: np.ndarray, B: np.ndarray, chunk_size: int = None) -> n
         # matrix before the final flatten so the ordering matches the unchunked path
         chunks = np.array_split(Lambda, max(1, Lambda.shape[0] // chunk_size))
         dd = np.hstack([B.dot(chunk.T) for chunk in chunks]).reshape((-1,))
-    return dd
-
-
-def _minimize_l1_right_only(Lambda: np.ndarray, A: np.ndarray, tol: float = 1e-4) -> np.ndarray:
-    """Perform the minimization using the L1 norm with proper equality constraints.
-    This function usses a compact basis (same as L2 minimization).
-    In the case of L1, this means that only right handed dislocations are allowed
-    In L2, negative/positive values are treated as left/right handed dislocations.
-
-    Solves: minimize ||rho||_1 subject to A @ rho = Lambda
-
-    Args:
-        Lambda: The Nye tensor components. Shape (n_voxels, 9)
-        A: The A matrix. Shape (9, n_slip_systems)
-        tol: Tolerance for constraint satisfaction (increased default)
-
-    Returns:
-        np.ndarray: The dislocation density. Shape (n_slip_systems, n_voxels)
-    """
-    Lambda = Lambda.astype(np.float64)
-    A = A.astype(np.float64)
-
-    n_constraints = A.shape[0]
-    n_slip_systems = A.shape[1]
-    N = Lambda.shape[0]
-
-    dd = np.zeros((n_slip_systems, N), dtype=np.float64)
-    bad_count = 0
-
-    for i in range(N):
-        # Formulation: minimize sum(t_i)
-        # subject to:
-        #   - A @ rho = Lambda[i]  (equality constraint)
-        #   - rho_i <= t_i for all i (inequality)
-        #   - -rho_i <= t_i for all i (inequality)
-        #   - rho_i >= 0, t_i >= 0 (bounds)
-
-        # Objective: minimize sum of t variables
-        c = np.hstack(
-            [
-                np.zeros(n_slip_systems, dtype=np.float64),  # coefficients for rho
-                np.ones(n_slip_systems, dtype=np.float64),  # coefficients for t
-            ]
-        )
-
-        # Equality constraint: A @ rho = Lambda[i]
-        A_eq = np.hstack(
-            [
-                A,  # (9, n_slip_systems)
-                np.zeros(
-                    (n_constraints, n_slip_systems), dtype=np.float64
-                ),  # zeros for t variables
-            ]
-        )
-        b_eq = Lambda[i].reshape(-1).astype(np.float64)
-
-        # Inequality constraints: rho_i <= t_i and -rho_i <= t_i
-        I = np.eye(n_slip_systems, dtype=np.float64)
-        A_ub = np.vstack(
-            [
-                np.hstack([I, -I]),  # rho_i - t_i <= 0  (i.e., rho_i <= t_i)
-                np.hstack([-I, -I]),  # -rho_i - t_i <= 0 (i.e., -rho_i <= t_i, or rho_i >= -t_i)
-            ]
-        )
-        b_ub = np.zeros(2 * n_slip_systems, dtype=np.float64)
-
-        # Bounds: all variables non-negative
-        bounds = [(0.0, None)] * (n_slip_systems * 2)
-
-        # Solve
-        result = optimize.linprog(
-            c,
-            A_ub=A_ub,
-            b_ub=b_ub,
-            A_eq=A_eq,
-            b_eq=b_eq,
-            bounds=bounds,
-            method="highs",  # Changed from highs-ipm to highs (more robust)
-            options={
-                "presolve": True,
-                "disp": False,
-                "time_limit": 10.0,  # Add timeout per problem
-                "dual_feasibility_tolerance": 1e-6,
-                "primal_feasibility_tolerance": 1e-6,
-            },
-        )
-
-        if not result.success:
-            dd[:, i] = 0
-            bad_count += 1
-        else:
-            dd[:, i] = result.x[:n_slip_systems]
-
-    if bad_count > 0:
-        print(f"L1 minimization: {bad_count} failed optimizations out of {N}")
-    # print("L1 reconstruction error:", np.linalg.norm(A @ dd - Lambda.T))
     return dd
 
 
@@ -953,7 +857,7 @@ def calculate(
     if len(spacing) != ndim:
         raise ValueError("The spacing must have the same number of dimensions as the Euler angles")
 
-    euler = euler.astype(PRECISION)
+    euler = euler.astype(_PRECISION)
 
     # Handle minimization
     if isinstance(minimization, tuple):
