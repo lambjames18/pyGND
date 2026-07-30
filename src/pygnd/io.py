@@ -484,11 +484,11 @@ def remove_npz(folder: str | Path) -> None:
     Returns:
         None
     """
-    if Path(folder) / "fdm.npy".exists():
+    if (Path(folder) / "fdm.npy").exists():
         Path(folder).joinpath("fdm.npy").unlink()
-    if Path(folder) / "gnd_l1.npy".exists():
+    if (Path(folder) / "gnd_l1.npy").exists():
         Path(folder).joinpath("gnd_l1.npy").unlink()
-    if Path(folder) / "gnd_l2.npy".exists():
+    if (Path(folder) / "gnd_l2.npy").exists():
         Path(folder).joinpath("gnd_l2.npy").unlink()
 
 

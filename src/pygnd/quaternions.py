@@ -283,7 +283,7 @@ def qu_disorientation(
     # broadcasting is done so that the output is of shape (N, |laue_group_2|, |laue_group_1|, 4)
     equivalent_quaternions = qu_prod_raw(
         laue_group_2.reshape(1, -1, 1, 4),
-        qu_prod_raw(misori_quats.reshape(N, 1, 1, 4), laue_group_1.reshape(1, 1, -1, 4)),
+        qu_prod_raw(misori_quats.reshape((N, 1, 1, 4)), laue_group_1.reshape((1, 1, -1, 4))),
     )
 
     # flatten along the laue group dimensions
@@ -422,7 +422,7 @@ def qu_slerp(a: np.ndarray, b: np.ndarray, t: float) -> np.ndarray:
     sin_theta = np.sin(angle)
     w1 = np.sin((1 - t) * angle) / sin_theta
     w2 = np.sin(t * angle) / sin_theta
-    return (a.unsqueeze(-1) * w1 + b.unsqueeze(-1) * w2).squeeze(-1)
+    return a * w1[..., None] + b * w2[..., None]
 
 
 def qu_log(q: np.ndarray, tol=1e-6) -> np.ndarray:
@@ -662,9 +662,9 @@ def symmetrize(q: np.ndarray, laue_id: int) -> np.ndarray:
     """
     S = laue_elements(laue_id)
     q = qu_norm_std(q)
-    q = q.reshape(-1, 1, 4)
-    S = S.reshape(1, -1, 4)
-    q_sym = qu_prod(S[None], q[:, None]).reshape(q.shape[0], -1, 4)
+    q = q.reshape((-1, 1, 4))
+    S = S.reshape((1, -1, 4))
+    q_sym = qu_prod(S[None], q[:, None]).reshape((q.shape[0], -1, 4))
     return q_sym
 
 
