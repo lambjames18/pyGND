@@ -1,11 +1,19 @@
+"""Small shared helpers used across the pygnd package."""
+
 import contextlib
 import joblib
 
 
-# Context manager to patch joblib to report into tqdm progress bar given as argument
 @contextlib.contextmanager
 def tqdm_joblib(tqdm_object):
-    """Context manager to patch joblib to report into tqdm progress bar given as argument"""
+    """Context manager that patches joblib to report progress into a tqdm bar.
+
+    Args:
+        tqdm_object: a `tqdm` progress bar instance to update as joblib tasks complete.
+
+    Yields:
+        The same `tqdm_object`, updated automatically as each parallel batch finishes.
+    """
 
     class TqdmBatchCompletionCallback(joblib.parallel.BatchCompletionCallBack):
         def __call__(self, *args, **kwargs):
