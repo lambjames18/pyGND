@@ -80,3 +80,4 @@ venv.bak/
 # Project specific
 histograms.png
 demo_data/
+uv.lock

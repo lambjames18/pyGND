@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
 
 [project]
 name = "pygnd"
-version = "0.1.0"
+dynamic = ["version"]
 description = "GND calculations for TriBeam 3D microstructures using dislocation theory"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -13,79 +13,82 @@ authors = [
     {name = "James Lamb", email = "your.email@example.com"},
     {name = "Wyatt Witzen"},
 ]
-keywords = ["materials science", "dislocation", "GND", "microstructure", "EBSD", "crystallography"]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Science/Research",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Topic :: Scientific/Engineering :: Physics",
-    "Topic :: Scientific/Engineering :: Materials Science",
-]
 
 dependencies = [
-    "numpy>=1.20",
-    "scipy>=1.7",
-    "h5py>=3.0",
-    "matplotlib>=3.3",
-    "tqdm>=4.50",
-    "joblib>=1.0",
+    "numpy",
+    "scipy",
+    "h5py",
+    "matplotlib",
+    "tqdm",
+    "joblib",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
-    "pytest>=7.0",
-    "pytest-cov>=4.0",
-    "black>=22.0",
-]
-test = [
-    "pytest>=7.0",
-    "pytest-cov>=4.0",
+    "pylint",
+    "pylint-exit",
+    "pytest",
+    "pytest-cov",
+    "pdoc",
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/TriBeam_GND"
-Repository = "https://github.com/yourusername/TriBeam_GND"
-Issues = "https://github.com/yourusername/TriBeam_GND/issues"
+Homepage = "https://github.com/lambjames18/pyGND"
+Repository = "https://github.com/lambjames18/pyGND"
+Issues = "https://github.com/lambjames18/pyGND/issues"
+Documentation = "https://lambjames18.github.io/pyGND/api/"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+# ----------------------
+# Hatch Configuration
+# ----------------------
 
-[tool.setuptools.package-data]
-pygnd = ["py.typed"]
+[tool.hatch.version]
+source = "vcs"
 
-[tool.black]
-line-length = 100
-target-version = ['py310']
+[tool.hatch.version.raw-options]
+local_scheme = "no-local-version"  # Ensures clean versions like 0.0.9 instead of 0.0.9+g1234567
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pygnd"]
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/pygnd/_version.py"  # File to be generated when compiled
+
+# ----------------------
+# Pytest Configuration
+# ----------------------
 
 [tool.pytest.ini_options]
+python_files = ["test_*.py", "*_test.py"]
 testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = [
-    "-v",
-    "--strict-markers",
-    "--tb=short",
-]
-markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "integration: marks tests as integration tests",
-]
+pythonpath = ["src"]
+addopts = "--cov=src/pygnd --cov-report=term-missing -rs"
 
-[tool.coverage.run]
-source = ["pygnd"]
+# ----------------------
+# Coverage Configuration
+# ----------------------
+
+[tool.coverage.run]  # Coverage is used for test coverage reports
+branch = true
+relative_files = true
+source = ["src"]
 omit = ["*/tests/*", "*/__pycache__/*"]
 
-[tool.coverage.report]
+[tool.coverage.paths]
+pygnd = [
+    "src/pygnd",
+]
+
+[tool.coverage.report]  # Coverage is used for test coverage reports
+show_missing = true  # Show which lines were not covered
 exclude_lines = [
     "pragma: no cover",
-    "def __repr__",
-    "raise AssertionError",
-    "raise NotImplementedError",
     "if __name__ == .__main__.:",
-    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
 ]
+
+[tool.coverage.html]
+directory = "coverage_reports/combined/htmlcov"
+
+[tool.coverage.xml]
+output = "coverage_reports/combined/coverage.xml"

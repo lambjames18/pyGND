@@ -848,6 +848,8 @@ def minimize(
     if cs == 1 or cs == 2:
         dd = dd / burgers
     else:
+        burgers_basal_prismatic = None
+        burgers_pyramidal = None
         if len(burgers) == 2:
             burgers_basal_prismatic = burgers[0]
             burgers_pyramidal = burgers[1]
@@ -1057,6 +1059,8 @@ def calculate_and_save(
     elif ang_path is not None:
         folder = Path(ang_path).parent
         euler, ids, spacing = io.read_ang(ang_path, grain_ids_path)
+    else:
+        raise ValueError("Either dream3d_path or ang_path must be provided.")
 
     print("Euler angles shape:", euler.shape)
     print("Grain IDs shape:", ids.shape)

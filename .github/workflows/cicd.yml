@@ -1,0 +1,218 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+    tags:
+      - "v*"
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PACKAGE_IMPORT: pygnd
+  PACKAGE_SRC: src/pygnd
+
+jobs:
+  test:
+    name: Lint and Test / ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Announce workflow file
+        run: echo "Workflow file ${{ github.workflow_ref }}"
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Build check
+        run: uv build
+
+      - name: Run Pylint
+        run: uv run pylint ${{ env.PACKAGE_SRC }} || uv run pylint-exit --error-fail $?
+
+      - name: Run Pytest
+        run: >
+          uv run pytest -v
+          --cov=${{ env.PACKAGE_IMPORT }}
+          --cov-report=xml:coverage.xml
+          --cov-report=html:htmlcov
+          --cov-report=term
+          --junitxml=junit.xml
+
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-artifacts-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: |
+            coverage.xml
+            htmlcov/
+            junit.xml
+
+  docs-and-badges:
+    name: Build API docs and badges
+    runs-on: ubuntu-latest
+
+    needs: test
+
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Create site directories
+        run: mkdir -p site/badges site/api
+
+      - name: Run Pylint for badge
+        run: |
+          uv run pylint ${{ env.PACKAGE_SRC }} --exit-zero | tee pylint-report.txt
+
+      - name: Run Pytest for coverage badge
+        run: >
+          uv run pytest -v
+          --cov=${{ env.PACKAGE_IMPORT }}
+          --cov-report=xml:coverage.xml
+          --cov-report=html:site/coverage
+          --cov-report=term
+          --junitxml=junit.xml
+
+      - name: Generate Shields badge JSON
+        run: |
+          python .github/scripts/make_badges.py
+
+      - name: Build API docs with pdoc
+        run: uv run pdoc ${{ env.PACKAGE_IMPORT }} -o site/api
+
+      - name: Add simple landing page
+        run: |
+          cat > site/index.html <<'EOF'
+          <!doctype html>
+          <html>
+            <head>
+              <meta charset="utf-8">
+              <title>Project Documentation</title>
+            </head>
+            <body>
+              <h1>Project Documentation</h1>
+              <ul>
+                <li><a href="api/">API documentation</a></li>
+                <li><a href="coverage/">Coverage report</a></li>
+                <li><a href="badges/pylint.json">Pylint badge JSON</a></li>
+                <li><a href="badges/coverage.json">Coverage badge JSON</a></li>
+              </ul>
+            </body>
+          </html>
+          EOF
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  release:
+    name: Build release and publish to PyPI
+    runs-on: ubuntu-latest
+
+    needs: test
+
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Build distribution
+        run: uv build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
