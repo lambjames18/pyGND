@@ -3,11 +3,13 @@ Simple tkinter GUI for PyGND calculations.
 Author: Generated for PyGND project
 """
 
+from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import threading
 import os
 import sys
+from PIL import Image, ImageTk
 
 # Add src to path if running from project root
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
@@ -53,9 +55,13 @@ class PyGNDGui:
 
     def __init__(self, root):
         self.root = root
-        self.root.title("PyGND - GND Calculator")
+        self.root.title("pyGND - GND Calculator")
         self.root.geometry("600x700")
         self.root.resizable(True, True)
+        icon_path = Path(__file__).parent.parent.parent.joinpath("resources").joinpath("pyGND_icon.ico")
+        img = Image.open(icon_path)
+        self.icon = ImageTk.PhotoImage(img)
+        self.root.iconphoto(False, self.icon)
 
         # Variables
         self.file_type = tk.StringVar(value="ANG")

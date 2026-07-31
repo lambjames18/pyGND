@@ -47,6 +47,7 @@ dev = [
 [project.scripts]
 pygnd_gui = "pygnd.gui:main"
 pygnd_calculate = "pygnd.cli:main"
+pygnd = "pygnd.cli:info"
 
 [project.urls]
 Homepage = "https://github.com/lambjames18/pyGND"

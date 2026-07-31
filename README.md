@@ -1,6 +1,7 @@
-# PyGND
 
-### THIS CODE IS UNDER ACTIVE DEVELOPMENT
+![main_logo](./resources/pyGND_logo.png)
+
+# pyGND
 
 **Geometrically Necessary Dislocation calculations for TriBeam 3D microstructures**
 
@@ -12,6 +13,8 @@
 [![Python Version](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
 PyGND is a Python package for calculating geometrically necessary dislocation (GND) densities from EBSD (Electron Backscatter Diffraction) data using Nye's dislocation theory. The code was originally developed in MATLAB by Wyatt Witzen and has been reimplemented in Python for improved performance and accessibility.
+
+**THIS CODE IS UNDER ACTIVE DEVELOPMENT AND IS PROVIDED AS_IS.** Please submit an issue if any problems arise.
 
 ## Features
 
