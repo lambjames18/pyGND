@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `pygnd_calculate` command line interface, with `dream3d` and `ang` subcommands and a `--dry-run` validation mode
+- `calculate_and_save_dream3d` and `calculate_and_save_ang` as explicit, single-format entry points
+- Expanded test suite covering `pygnd.core`, `pygnd.io`, `pygnd.rotations`, `pygnd.quaternions`, and the CLI
+- API documentation built with pdoc and a test coverage report, both published on every push to `main`
+- Automatic, git-tag-driven versioning (`hatch-vcs`) and PyPI publishing via CI trusted publishing
+
+### Changed
+- `calculate_and_save(...)` is now a deprecated wrapper that dispatches to `calculate_and_save_dream3d`/`calculate_and_save_ang` based on the arguments passed
+- Various bug fixes found during a full code audit of `pygnd.core`, `pygnd.rotations`, and `pygnd.quaternions`
+
+### Deprecated
+- `calculate_and_save(...)` — use `calculate_and_save_dream3d(...)` or `calculate_and_save_ang(...)` instead
+
 ## [0.1.0] - 2025-12-17
 
 ### Added

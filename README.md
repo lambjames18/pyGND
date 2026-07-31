@@ -9,7 +9,7 @@
 [![Docs](https://img.shields.io/badge/docs-pdoc-blue)](https://lambjames18.github.io/pyGND/api/)
 [![CI](https://github.com/lambjames18/pyGND/actions/workflows/cicd.yml/badge.svg)](https://github.com/lambjames18/pyGND/actions/workflows/cicd.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Python Version](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
 PyGND is a Python package for calculating geometrically necessary dislocation (GND) densities from EBSD (Electron Backscatter Diffraction) data using Nye's dislocation theory. The code was originally developed in MATLAB by Wyatt Witzen and has been reimplemented in Python for improved performance and accessibility.
 
@@ -22,10 +22,11 @@ PyGND is a Python package for calculating geometrically necessary dislocation (G
 - **Multiple input formats**: Support for ANG files and DREAM.3D formats
 - **Progress tracking**: Built-in progress bars for long calculations
 - **Memory efficient**: Configurable chunking for large datasets
+- **Desktop GUI** and a **command line interface**, in addition to the Python API
 
 ## Installation
 
-### From PyPI (once published)
+### From PyPI
 
 ```bash
 pip install pygnd
@@ -34,41 +35,37 @@ pip install pygnd
 ### From source
 
 ```bash
-git clone https://github.com/yourusername/TriBeam_GND.git
-cd TriBeam_GND
+git clone https://github.com/lambjames18/pyGND.git
+cd pyGND
 pip install -e .
 ```
 
+If you use [uv](https://docs.astral.sh/uv/) (the toolchain this project develops with), `uv sync` will set up an editable install with all dependencies resolved from `pyproject.toml`.
+
 ## Quick Start
 
-### Example calculation for an ANG file
+### Python API
 
 ```python
 import pygnd
 
-# Calculate GND from an ANG file
-pygnd.calculate_and_save(
-    ang_path="path/to/data.ang",
-    grain_ids_path="path/to/grain_data.txt",
+# Calculate GND from an .ang file
+pygnd.calculate_and_save_ang(
+    "path/to/data.ang",
     cs=1,  # 1=FCC, 2=BCC, 3=HCP
     burgers=2.48e-10,  # Burgers vector magnitude in meters
+    grain_ids_path="path/to/grain_data.txt",
     minimization=["l2", "l1"],
     slip_systems="all",
     n_cpus=4,
     progress_bar=True,
 )
-```
 
-### Example calculation for a DREAM.3D file
-
-```python
-import pygnd
-
-# Calculate GND from DREAM.3D format
-pygnd.calculate_and_save(
-    dream3d_path="path/to/data.dream3d",
-    grain_ids_path="DataContainers/ImageDataContainer/CellData/FeatureIds",
-    euler_angles_path="DataContainers/ImageDataContainer/CellData/EulerAngles",
+# Calculate GND from a DREAM.3D file and save the results back into it
+pygnd.calculate_and_save_dream3d(
+    "path/to/data.dream3d",
+    ids_name="DataContainers/ImageDataContainer/CellData/FeatureIds",
+    euler_name="DataContainers/ImageDataContainer/CellData/EulerAngles",
     cs=2,  # BCC
     burgers=2.48e-10,
     minimization="l2",
@@ -77,6 +74,26 @@ pygnd.calculate_and_save(
     chunk_size=5000,
 )
 ```
+
+See [`examples/`](examples/) for complete runnable scripts, and the [API documentation](https://lambjames18.github.io/pyGND/api/) for the full parameter reference (including `pygnd.get_linear_operator`, the `pygnd.rotations`/`pygnd.quaternions` conversion utilities, and lower-level functions in `pygnd.core`).
+
+### Command line
+
+Installing the package also provides two console scripts:
+
+```bash
+# Run the same calculation as above from the command line
+pygnd_calculate ang path/to/data.ang --cs 1 --burgers 2.48e-10 --grain-ids-path path/to/grain_data.txt
+pygnd_calculate dream3d path/to/data.dream3d --ids-name FeatureIds --euler-name EulerAngles --cs 2 --burgers 2.48e-10
+
+# Validate a file's shape/spacing before queuing a large job, without running the calculation
+pygnd_calculate ang path/to/data.ang --dry-run
+
+# Launch the desktop GUI
+pygnd_gui
+```
+
+Run `pygnd_calculate --help`, `pygnd_calculate ang --help`, or `pygnd_calculate dream3d --help` for the full list of options (minimization scheme, CPU/chunk-size controls, slip systems, etc.) — these mirror the Python API parameters below.
 
 ## Crystal Structures and Slip Systems
 
@@ -103,26 +120,25 @@ Available slip system options:
 - `"prismatic+pyramidal"` - Combined prismatic and pyramidal
 - `"all"` - All available slip systems
 
-## Parameters
+For HCP with a mixed basal/prismatic + pyramidal slip-system combination, `burgers` must be a `(basal/prismatic, pyramidal)` tuple of the two Burgers vector magnitudes.
 
-### Main Function: `calculate_and_save()`
+## Main Functions
 
-**Input file parameters:**
-- `ang_path` (str, optional): Path to ANG file
-- `dream3d_path` (str, optional): Path to DREAM.3D file
-- `grain_ids_path` (str): Path to grain IDs data
-- `euler_angles_path` (str, optional): Path to Euler angles (for DREAM.3D)
+- **`calculate_and_save_ang(ang_path, cs, burgers, grain_ids_path=None, ...)`** — calculate from an `.ang` file, saving results as `.npy` files and preview images next to it.
+- **`calculate_and_save_dream3d(dream3d_path, ids_name, euler_name, cs, burgers, ...)`** — calculate from a DREAM.3D file, saving results back into it (falling back to `.npy` files if the DREAM.3D write fails).
+- **`calculate_and_save(...)`** — a deprecated combined-argument entry point kept for backwards compatibility; prefer the two functions above.
 
-**Material parameters:**
+Both functions share the following parameters:
+
 - `cs` (int): Crystal structure (1=FCC, 2=BCC, 3=HCP)
-- `burgers` (float): Burgers vector magnitude in meters
+- `burgers` (float or tuple): Burgers vector magnitude(s) in meters (see above for HCP mixed slip systems)
 - `slip_systems` (str): Slip system selection (see above)
-
-**Calculation parameters:**
-- `minimization` (str or list): "l1", "l2", or both ["l1", "l2"]
-- `n_cpus` (int): Number of CPU cores to use
+- `minimization` (str or list): `"l1"`, `"l2"`, or both `["l1", "l2"]`
+- `n_cpus` (int): Number of CPU cores to use for L1 minimization (`-1` uses all available)
 - `chunk_size` (int): Data points per processing chunk
-- `progress_bar` (bool): Show progress bar
+- `progress_bar` (bool): Show a progress bar during L1 minimization
+
+See the [API documentation](https://lambjames18.github.io/pyGND/api/) for the complete, per-function parameter reference.
 
 ## Output
 
@@ -132,41 +148,43 @@ The package saves results in `.npy` files by default. If a DREAM.3D file is used
 
 ## Dependencies
 
-- numpy >= 1.20
-- scipy >= 1.7
-- h5py >= 3.0
-- matplotlib >= 3.3
-- tqdm >= 4.50
-- joblib >= 1.0
+Runtime dependencies (see `pyproject.toml` for the authoritative, unpinned list): `numpy`, `scipy`, `h5py`, `matplotlib`, `tqdm`, `joblib`.
 
 Conda environment example:
 
-```
+```bash
 conda create -n pygnd_env python=3.12 numpy scipy h5py matplotlib tqdm joblib
+conda activate pygnd_env
+pip install -e .
 ```
+
+## Documentation
+
+- [API documentation](https://lambjames18.github.io/pyGND/api/) (built with [pdoc](https://pdoc.dev/))
+- [Test coverage report](https://lambjames18.github.io/pyGND/coverage/)
+
+Both are rebuilt automatically on every push to `main`.
 
 ## Testing
 
-PyGND includes a comprehensive test suite with 72+ tests covering core functionality. To run tests:
+PyGND has an extensive test suite covering all of `pygnd.core`, `pygnd.io`, `pygnd.quaternions`, `pygnd.rotations`, and the `pygnd_calculate` CLI — see the coverage badge/report above for current numbers.
 
 ```bash
-# Install test dependencies
-pip install -e ".[test]"
+# Install with dev dependencies (pytest, pytest-cov, pylint)
+uv sync --all-extras --dev
 
 # Run tests
-pytest
+uv run pytest
 
-# Run with coverage
-pytest --cov=pygnd --cov-report=html
+# Run with an HTML coverage report
+uv run pytest --cov=pygnd --cov-report=html
 ```
-
-See [TESTING.md](TESTING.md) for detailed testing documentation.
 
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request. Before submitting:
 
-1. Ensure all tests pass: `pytest`
+1. Ensure all tests pass: `uv run pytest`
 2. Add tests for new features
 3. Follow the existing code style
 4. Update documentation as needed

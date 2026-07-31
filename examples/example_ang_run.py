@@ -39,11 +39,11 @@ chunk_size = 1000
 #############################################
 
 
-pygnd.calculate_and_save(
-    ang_path=path,
-    grain_ids_path=grain_ids_path,
+pygnd.calculate_and_save_ang(
+    path,
     cs=cs,
     burgers=burgers,
+    grain_ids_path=grain_ids_path,
     minimization=minimization,
     slip_systems=slip_systems,
     n_cpus=n_cpus,
