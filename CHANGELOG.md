@@ -5,14 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.0]
 
 ### Added
 - `pygnd` command line entry point: prints the version, an ASCII logo, and a summary of the available console scripts
 - Project logo (`resources/pyGND_logo.png`) and a desktop icon for the GUI (`resources/pyGND_icon.ico`)
-
-### Fixed
-- `src/pygnd/_version.py` is no longer tracked in git; committing it caused the release build to see a "dirty" working tree and publish an incorrect `.devN` version instead of the tagged release version
 
 ## [1.0.0]
 
@@ -22,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Expanded test suite covering `pygnd.core`, `pygnd.io`, `pygnd.rotations`, `pygnd.quaternions`, and the CLI
 - API documentation built with pdoc and a test coverage report, both published on every push to `main`
 - Automatic, git-tag-driven versioning (`hatch-vcs`) and PyPI publishing via CI trusted publishing
+
+### Fixed
+- `src/pygnd/_version.py` is no longer tracked in git; committing it caused the release build to see a "dirty" working tree and publish an incorrect `.devN` version instead of the tagged release version
 
 ### Changed
 - `calculate_and_save(...)` is now a deprecated wrapper that dispatches to `calculate_and_save_dream3d`/`calculate_and_save_ang` based on the arguments passed
