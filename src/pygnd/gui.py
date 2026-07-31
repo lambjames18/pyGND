@@ -464,7 +464,7 @@ class PyGNDGui:
             self._log_threadsafe(f"Slip systems: {self.slip_systems.get()}")
             self._log_threadsafe(f"Minimization: {minimization}")
 
-            # Build kwargs
+            # Build kwargs shared by both file types
             kwargs = {
                 "cs": self.CRYSTAL_STRUCTURES[self.crystal_structure.get()],
                 "burgers": float(self.burgers.get()),
@@ -476,19 +476,16 @@ class PyGNDGui:
             }
 
             if self.file_type.get() == "ANG":
-                kwargs["ang_path"] = self.file_path.get()
                 if self.grain_ids_path.get():
                     kwargs["grain_ids_path"] = self.grain_ids_path.get()
+                self._log_threadsafe("Calling pygnd.calculate_and_save_ang()...")
+                success = pygnd.calculate_and_save_ang(self.file_path.get(), **kwargs)
             else:
-                kwargs["dream3d_path"] = self.file_path.get()
-                kwargs["ids_name"] = self.ids_name.get()
-                kwargs["euler_name"] = self.euler_name.get()
                 kwargs["spacing_units"] = self.spacing_units.get()
-
-            self._log_threadsafe("Calling pygnd.calculate_and_save()...")
-
-            # Run calculation
-            success = pygnd.calculate_and_save(**kwargs)
+                self._log_threadsafe("Calling pygnd.calculate_and_save_dream3d()...")
+                success = pygnd.calculate_and_save_dream3d(
+                    self.file_path.get(), self.ids_name.get(), self.euler_name.get(), **kwargs
+                )
 
             self._log_threadsafe("Calculation complete!")
 
