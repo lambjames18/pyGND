@@ -6,36 +6,36 @@ Thank you for your interest in contributing to PyGND! This document provides gui
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/TriBeam_GND.git
-   cd TriBeam_GND
+   git clone https://github.com/lambjames18/pyGND.git
+   cd pyGND
    ```
 
-2. Create a virtual environment:
+2. Install dependencies with [uv](https://docs.astral.sh/uv/) (the toolchain this project develops with), including the `dev` dependency group (pytest, pylint, pdoc, etc.):
    ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   uv sync --all-extras --dev
    ```
 
-3. Install in editable mode with development dependencies:
+   Without `uv`, an editable install plus the dev tools works too:
    ```bash
-   pip install -e ".[dev]"
+   pip install -e .
+   pip install pylint pylint-exit pytest pytest-cov pdoc
    ```
 
 ## Code Style
 
 - Follow PEP 8 guidelines
 - Use type hints where appropriate
-- Keep lines under 100 characters
-- Use Black for code formatting: `black src/`
-- Use Ruff for linting: `ruff check src/`
+- Use Google-style docstrings (the project's API docs are built with [pdoc](https://pdoc.dev/) using `-d google`)
+- Lint with pylint: `uv run pylint src/pygnd`
 
 ## Testing
 
 Before submitting a pull request:
 
-1. Ensure your code passes all tests (when available)
-2. Test with different crystal structures (FCC, BCC, HCP)
-3. Verify that example scripts still work
+1. Ensure all tests pass: `uv run pytest`
+2. Add tests for new features or bug fixes
+3. Test with different crystal structures (FCC, BCC, HCP) where relevant
+4. Verify that the example scripts in `examples/` still work
 
 ## Submitting Changes
 

@@ -1,138 +1,84 @@
 # Publishing Guide for PyGND
 
-This guide explains how to publish PyGND to PyPI and maintain the package.
+This guide explains how PyGND is released to PyPI. Releasing is almost entirely
+automated: **pushing a `v*` git tag triggers CI to build and publish the
+package**. There is no manual version bumping and no local `twine upload` step.
 
-## Pre-Publishing Checklist
+## How releases work
 
-Before publishing, ensure:
+- **Versioning** is fully automatic via [`hatch-vcs`](https://github.com/ofek/hatch-vcs):
+  the version is derived from the latest git tag (e.g. tag `v0.2.0` produces
+  version `0.2.0`). Nothing in `pyproject.toml` or `src/pygnd/_version.py`
+  needs to be edited by hand — `_version.py` is generated at build time.
+- **Publishing** happens in the `release` job of
+  [`.github/workflows/cicd.yml`](.github/workflows/cicd.yml), which runs when
+  a tag matching `v*` is pushed. It builds the package with `uv build` and
+  uploads it to PyPI using
+  [`pypa/gh-action-pypi-publish`](https://github.com/pypa/gh-action-pypi-publish)
+  via **PyPI Trusted Publishing** (OIDC) — no API tokens or `.pypirc` files
+  are involved.
 
-- [ ] Update version number in `src/pygnd/_version.py` and `pyproject.toml`
-- [ ] Update README.md with any new features or changes
-- [ ] Update your email in `pyproject.toml`
-- [ ] Update GitHub repository URL in `pyproject.toml` and `README.md`
-- [ ] All tests pass
-- [ ] LICENSE file is correct
-- [ ] CHANGELOG.md is updated (create if needed)
+## Cutting a release
 
-## Building the Package
-
-1. Install build tools:
+1. Make sure `main` is green (CI passing) and has everything you want in the
+   release.
+2. Update `CHANGELOG.md` with a new version section.
+3. Tag and push:
    ```bash
-   pip install build twine
+   git tag v0.2.0
+   git push origin v0.2.0
    ```
+4. Watch the `release` job in the [Actions tab](https://github.com/lambjames18/pyGND/actions/workflows/cicd.yml).
+   On success, the new version is live on [PyPI](https://pypi.org/project/pygnd/).
+5. Optionally, create a GitHub release from the tag with release notes.
 
-2. Build the package:
-   ```bash
-   python -m build
-   ```
+Follow [Semantic Versioning](https://semver.org/): `vMAJOR.MINOR.PATCH`
+(e.g. `v0.1.0` → `v0.1.1` bug fix → `v0.2.0` new feature → `v1.0.0` stable API).
 
-   This creates:
-   - `dist/pygnd-0.1.0.tar.gz` (source distribution)
-   - `dist/pygnd-0.1.0-py3-none-any.whl` (wheel)
+## One-time setup: PyPI Trusted Publisher
 
-3. Check the package:
-   ```bash
-   twine check dist/*
-   ```
+Trusted publishing must be configured once on PyPI before the first tagged
+release can succeed (this step must be done by a maintainer with access to
+the PyPI project/account — it cannot be done from CI).
 
-## Testing the Package Locally
+1. Go to https://pypi.org/manage/account/publishing/ (for a project that
+   doesn't exist on PyPI yet, this is the "pending publisher" flow).
+2. Add a new pending publisher with:
+   - **PyPI Project Name**: `pygnd`
+   - **Owner**: `lambjames18`
+   - **Repository name**: `pyGND`
+   - **Workflow name**: `cicd.yml`
+   - **Environment name**: leave blank (the `release` job does not use a
+     GitHub Environment)
+3. Save. The next `v*` tag pushed to the repository will be able to publish
+   successfully.
 
-Before publishing, test the package locally:
+## Testing a build locally
+
+You can build and sanity-check the package without publishing anything:
 
 ```bash
-# Install from local build
-pip install dist/pygnd-0.1.0-py3-none-any.whl
-
-# Test import
+uv build
+pip install dist/pygnd-*.whl
 python -c "import pygnd; print(pygnd.__version__)"
-
-# Run example scripts
 cd examples
 python example_ang_run.py
 ```
 
-## Publishing to Test PyPI (Recommended First)
-
-1. Create an account on [Test PyPI](https://test.pypi.org/account/register/)
-
-2. Configure `.pypirc` (in your home directory):
-   ```ini
-   [testpypi]
-   username = __token__
-   password = pypi-your-test-token-here
-   ```
-
-3. Upload to Test PyPI:
-   ```bash
-   twine upload --repository testpypi dist/*
-   ```
-
-4. Test installation from Test PyPI:
-   ```bash
-   pip install --index-url https://test.pypi.org/simple/ pygnd
-   ```
-
-## Publishing to PyPI
-
-1. Create an account on [PyPI](https://pypi.org/account/register/)
-
-2. Configure `.pypirc`:
-   ```ini
-   [pypi]
-   username = __token__
-   password = pypi-your-production-token-here
-   ```
-
-3. Upload to PyPI:
-   ```bash
-   twine upload dist/*
-   ```
-
-4. Verify installation:
-   ```bash
-   pip install pygnd
-   ```
-
-## Post-Publishing
-
-1. Tag the release in Git:
-   ```bash
-   git tag -a v0.1.0 -m "Release version 0.1.0"
-   git push origin v0.1.0
-   ```
-
-2. Create a GitHub release with the tag
-
-3. Update documentation if needed
-
-## Versioning
-
-Follow [Semantic Versioning](https://semver.org/):
-- MAJOR version: incompatible API changes
-- MINOR version: backwards-compatible functionality
-- PATCH version: backwards-compatible bug fixes
-
-Example: `0.1.0` → `0.1.1` (bug fix) → `0.2.0` (new feature) → `1.0.0` (stable API)
-
-## Updating the Package
-
-For subsequent releases:
-
-1. Update version in `src/pygnd/_version.py` and `pyproject.toml`
-2. Clean old builds: `rm -rf dist/ build/ src/pygnd.egg-info/`
-3. Build new version: `python -m build`
-4. Upload: `twine upload dist/*`
-5. Tag in Git: `git tag -a v0.2.0 -m "Release version 0.2.0"`
-
 ## Common Issues
 
 ### Import errors after installation
-- Ensure package structure is correct
-- Check that `__init__.py` properly exports functions
+- Ensure the package structure under `src/pygnd/` is correct.
+- Check that `__init__.py` properly exports the expected functions.
 
 ### Missing dependencies
-- Verify all dependencies are listed in `pyproject.toml`
+- Verify all dependencies are listed in `pyproject.toml`.
 
-### Files not included in package
-- Update `MANIFEST.in` to include necessary files
-- Check `pyproject.toml` package discovery settings
+### `release` job fails with an authentication/trusted-publisher error
+- Confirm the pending publisher (or, after the first successful publish, the
+  regular trusted publisher) is configured on PyPI exactly as above —
+  project name, owner, repository, and workflow filename must match exactly.
+
+### Tag pushed but no release happened
+- Confirm the tag matches the `v*` pattern (e.g. `v0.1.0`, not `0.1.0`) and
+  was pushed to `origin` (`git push origin <tag>`), not just created locally.
