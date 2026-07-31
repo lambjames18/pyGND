@@ -477,7 +477,7 @@ def get_orientation_gradients(
 
     Returns:
         3D numpy array containing the orientation gradients, (X, Y, Z, 3, 3)
-          This is essectially 3 rotation vectors corresponding to the disorientation between neighboring voxels,
+          This is essentially 3 rotation vectors corresponding to the disorientation between neighboring voxels,
           each divided by the distance between the finite difference pair. The 3x3 matrix for each point is the rotation vector for each axis.
     """
     # Get the shape
