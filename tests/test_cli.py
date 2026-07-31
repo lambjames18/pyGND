@@ -274,3 +274,28 @@ class TestArgparseSurface:
         with pytest.raises(SystemExit) as exc_info:
             cli.main(["ang", str(ang_path), "--cs", "5", "--burgers", "1.0"])
         assert exc_info.value.code != 0
+
+
+class TestInfo:
+    """Tests for the `pygnd` console script (`cli.info`)."""
+
+    def test_prints_version_and_entry_points(self, capsys):
+        exit_code = cli.info([])
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        assert "pygnd" in captured.out
+        assert cli.__version__ in captured.out
+        assert "pygnd_calculate" in captured.out
+        assert "pygnd_gui" in captured.out
+
+    def test_version_flag_exits_zero(self, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            cli.info(["--version"])
+        assert exc_info.value.code == 0
+        captured = capsys.readouterr()
+        assert "pygnd" in captured.out
+
+    def test_unknown_flag_exits_nonzero(self):
+        with pytest.raises(SystemExit) as exc_info:
+            cli.info(["--not-a-flag"])
+        assert exc_info.value.code != 0
