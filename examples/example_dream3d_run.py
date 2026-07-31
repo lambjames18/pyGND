@@ -46,13 +46,13 @@ units = "um"
 #############################################
 
 
-pygnd.calculate_and_save(
-    dream3d_path=path,
+pygnd.calculate_and_save_dream3d(
+    path,
     ids_name=ids_name,
     euler_name=euler_name,
-    spacing_units=units,
     cs=cs,
     burgers=burgers,
+    spacing_units=units,
     minimization=minimization,
     slip_systems=slip_systems,
     n_cpus=n_cpus,
