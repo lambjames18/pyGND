@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `pygnd` command line entry point: prints the version, an ASCII logo, and a summary of the available console scripts
+- Project logo (`resources/pyGND_logo.png`) and a desktop icon for the GUI (`resources/pyGND_icon.ico`)
+
+### Fixed
+- `src/pygnd/_version.py` is no longer tracked in git; committing it caused the release build to see a "dirty" working tree and publish an incorrect `.devN` version instead of the tagged release version
+
 ## [1.0.0]
 
 ### Added
