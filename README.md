@@ -1,5 +1,5 @@
 
-![main_logo](./resources/pyGND_logo.png)
+![main_logo](https://raw.githubusercontent.com/lambjames18/pyGND/main/resources/pyGND_logo.png)
 
 # pyGND
 
