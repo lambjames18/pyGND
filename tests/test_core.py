@@ -1,5 +1,6 @@
 """Tests for the core module."""
 
+import h5py
 import numpy as np
 import pytest
 from pygnd import core, rotations
@@ -697,18 +698,39 @@ def create_ang_file(tmp_path, nrows=2, ncols=3, noise_seed=None):
     return path
 
 
-class TestCalculateAndSave:
-    """Tests for the top-level calculate_and_save function."""
+def create_dream3d_file(tmp_path, shape=(1, 3, 3), noise_seed=None, filename="test.dream3d"):
+    """Create a minimal valid DREAM3D file for calculate_and_save_dream3d tests.
+    If noise_seed is given, small per-voxel Euler angle noise is added so the
+    resulting GND density is nonzero; otherwise every voxel is identical."""
+    rng = np.random.default_rng(noise_seed) if noise_seed is not None else None
+    base_euler = np.array([0.3, 0.5, 0.2])
+    euler = np.tile(base_euler, shape + (1,)).astype(np.float32)
+    if rng is not None:
+        euler = euler + rng.normal(scale=0.05, size=euler.shape).astype(np.float32)
+    feature_ids = np.ones(shape + (1,), dtype=np.int32)
 
-    def test_ang_path_end_to_end(self, tmp_path):
+    path = tmp_path / filename
+    with h5py.File(path, "w") as f:
+        cell_data = f.create_group("DataContainers/ImageDataContainer/CellData")
+        cell_data.create_dataset("FeatureIds", data=feature_ids)
+        cell_data.create_dataset("EulerAngles", data=euler)
+        geometry = f.create_group("_SIMPL_GEOMETRY")
+        geometry.create_dataset("SPACING", data=np.array([0.5, 0.5, 0.5], dtype=np.float32))
+    return path
+
+
+class TestCalculateAndSaveAng:
+    """Tests for calculate_and_save_ang."""
+
+    def test_end_to_end(self, tmp_path):
         """Runs the full ang -> calculate -> save_npz/generate_images path with
         default n_cpus=-1, chunk_size=1000 (both regression-relevant defaults),
         with enough orientation variation to give a nonzero GND density."""
         ang_path = create_ang_file(tmp_path, nrows=3, ncols=3, noise_seed=70)
-        result = core.calculate_and_save(
+        result = core.calculate_and_save_ang(
+            ang_path,
             cs=1,
             burgers=2.48e-10,
-            ang_path=ang_path,
             slip_systems="all",
             minimization="l2",
             progress_bar=False,
@@ -720,20 +742,87 @@ class TestCalculateAndSave:
         gnd = np.load(tmp_path / "gnd_l2.npy")
         assert np.any(gnd > 0)
 
-    def test_ang_path_all_zero_gnd_does_not_crash(self, tmp_path):
+    def test_all_zero_gnd_does_not_crash(self, tmp_path):
         """Regression test: a perfectly uniform orientation field gives an
         all-zero GND density, and the results-summary printing used to crash
         with `dd[m][dd[m] > 0].min()` on the resulting empty array."""
         ang_path = create_ang_file(tmp_path, nrows=3, ncols=3)
-        result = core.calculate_and_save(
+        result = core.calculate_and_save_ang(
+            ang_path,
             cs=1,
             burgers=2.48e-10,
-            ang_path=ang_path,
             slip_systems="all",
             minimization="l2",
             progress_bar=False,
         )
         assert result is True
+
+    def test_no_grain_ids_path_warns(self, tmp_path):
+        ang_path = create_ang_file(tmp_path, nrows=2, ncols=2)
+        with pytest.warns(Warning, match="single grain"):
+            core.calculate_and_save_ang(ang_path, cs=1, burgers=2.48e-10)
+
+
+class TestCalculateAndSaveDream3d:
+    """Tests for calculate_and_save_dream3d."""
+
+    def test_end_to_end(self, tmp_path):
+        """Runs the full dream3d -> calculate -> save_to_dream3d path, with
+        enough orientation variation to give a nonzero GND density."""
+        dream3d_path = create_dream3d_file(tmp_path, shape=(1, 3, 3), noise_seed=71)
+        result = core.calculate_and_save_dream3d(
+            dream3d_path,
+            ids_name="FeatureIds",
+            euler_name="EulerAngles",
+            cs=1,
+            burgers=2.48e-10,
+            slip_systems="all",
+            minimization="l2",
+            progress_bar=False,
+        )
+        assert result is True
+        with h5py.File(dream3d_path, "r") as f:
+            assert "DataContainers/ImageDataContainer/CellData/GND_l2" in f
+
+    def test_invalid_ids_name_raises(self, tmp_path):
+        dream3d_path = create_dream3d_file(tmp_path)
+        with pytest.raises(KeyError):
+            core.calculate_and_save_dream3d(
+                dream3d_path, ids_name="NotARealName", euler_name="EulerAngles", cs=1, burgers=1.0
+            )
+
+
+class TestCalculateAndSaveDeprecatedWrapper:
+    """Tests for the deprecated combined calculate_and_save wrapper: it should
+    still work exactly as before, but warn and delegate to the new functions."""
+
+    def test_ang_path_warns_and_delegates(self, tmp_path):
+        ang_path = create_ang_file(tmp_path, nrows=2, ncols=2, noise_seed=72)
+        with pytest.warns(DeprecationWarning, match="calculate_and_save_ang"):
+            result = core.calculate_and_save(
+                cs=1, burgers=2.48e-10, ang_path=ang_path, minimization="l2"
+            )
+        assert result is True
+        assert (tmp_path / "gnd_l2.npy").exists()
+
+    def test_dream3d_path_warns_and_delegates(self, tmp_path):
+        dream3d_path = create_dream3d_file(tmp_path, noise_seed=73)
+        with pytest.warns(DeprecationWarning, match="calculate_and_save_dream3d"):
+            result = core.calculate_and_save(
+                cs=1,
+                burgers=2.48e-10,
+                dream3d_path=dream3d_path,
+                ids_name="FeatureIds",
+                euler_name="EulerAngles",
+                minimization="l2",
+            )
+        assert result is True
+
+    def test_both_paths_provided_raises(self):
+        with pytest.raises(ValueError, match="not both"):
+            core.calculate_and_save(
+                cs=1, burgers=1.0, dream3d_path="a.dream3d", ang_path="b.ang"
+            )
 
     def test_neither_path_provided_raises(self):
         """Regression test: previously euler/ids/spacing were never assigned if
