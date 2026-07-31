@@ -83,9 +83,12 @@ See [`examples/`](examples/) for complete runnable scripts, and the [API documen
 
 ### Command line
 
-Installing the package also provides two console scripts:
+Installing the package also provides three console scripts:
 
 ```bash
+# Print the version, logo, and a summary of the entry points below
+pygnd
+
 # Run the same calculation as above from the command line
 pygnd_calculate ang path/to/data.ang --cs 1 --burgers 2.48e-10 --grain-ids-path path/to/grain_data.txt
 pygnd_calculate dream3d path/to/data.dream3d --ids-name FeatureIds --euler-name EulerAngles --cs 2 --burgers 2.48e-10

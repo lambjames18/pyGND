@@ -283,8 +283,54 @@ def main(argv: list[str] | None = None) -> int:
     return 0 if success else 1
 
 
+_ENTRY_POINTS = [
+    ("pygnd", "Show this summary (version, logo, available entry points)."),
+    (
+        "pygnd_calculate",
+        "Run GND calculations from the command line. Subcommands: dream3d, ang.",
+    ),
+    ("pygnd_gui", "Launch the desktop GUI."),
+]
+
+
+def _build_info_parser() -> argparse.ArgumentParser:
+    """Build the argparse parser for the `pygnd` console script."""
+    parser = argparse.ArgumentParser(
+        prog="pygnd",
+        description="Show the PyGND version and available command line entry points.",
+    )
+    parser.add_argument("--version", action="version", version=f"pygnd {__version__}")
+    return parser
+
+
 def info(argv: list[str] | None = None) -> int:
-    return
+    """Entry point for the `pygnd` console script: prints the logo, the
+    installed version, and a summary of the other command line entry points
+    this package provides.
+
+    Args:
+        argv: command line arguments, or `None` to use `sys.argv`.
+
+    Returns:
+        Process exit code: always `0`.
+    """
+    _build_info_parser().parse_args(argv)
+
+    logo_lines = _LOGO.splitlines()
+    while logo_lines and not logo_lines[0].strip():
+        logo_lines.pop(0)
+    while logo_lines and not logo_lines[-1].strip():
+        logo_lines.pop()
+    print("\n".join(logo_lines))
+    print()
+    print(f"pygnd {__version__}")
+    print()
+    print("Available command line entry points:")
+    for name, description in _ENTRY_POINTS:
+        print(f"  {name:<16} {description}")
+    print()
+    print("Run any entry point with --help for its full list of options.")
+    return 0
 
 
 if __name__ == "__main__":
