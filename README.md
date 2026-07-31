@@ -37,10 +37,11 @@ pip install pygnd
 ```bash
 git clone https://github.com/lambjames18/pyGND.git
 cd pyGND
+
 pip install -e .
 ```
 
-If you use [uv](https://docs.astral.sh/uv/) (the toolchain this project develops with), `uv sync` will set up an editable install with all dependencies resolved from `pyproject.toml`.
+If you use [uv](https://docs.astral.sh/uv/) (the toolchain this project develops with), `uv sync` will set up an editable install with all dependencies resolved from `pyproject.toml`. Using uv is the recommended route, especially if planning to contribute to the project.
 
 ## Quick Start
 
@@ -64,8 +65,8 @@ pygnd.calculate_and_save_ang(
 # Calculate GND from a DREAM.3D file and save the results back into it
 pygnd.calculate_and_save_dream3d(
     "path/to/data.dream3d",
-    ids_name="DataContainers/ImageDataContainer/CellData/FeatureIds",
-    euler_name="DataContainers/ImageDataContainer/CellData/EulerAngles",
+    ids_name="FeatureIds",
+    euler_name="EulerAngles",
     cs=2,  # BCC
     burgers=2.48e-10,
     minimization="l2",
@@ -150,35 +151,10 @@ The package saves results in `.npy` files by default. If a DREAM.3D file is used
 
 Runtime dependencies (see `pyproject.toml` for the authoritative, unpinned list): `numpy`, `scipy`, `h5py`, `matplotlib`, `tqdm`, `joblib`.
 
-Conda environment example:
-
-```bash
-conda create -n pygnd_env python=3.12 numpy scipy h5py matplotlib tqdm joblib
-conda activate pygnd_env
-pip install -e .
-```
-
 ## Documentation
 
 - [API documentation](https://lambjames18.github.io/pyGND/api/) (built with [pdoc](https://pdoc.dev/))
 - [Test coverage report](https://lambjames18.github.io/pyGND/coverage/)
-
-Both are rebuilt automatically on every push to `main`.
-
-## Testing
-
-PyGND has an extensive test suite covering all of `pygnd.core`, `pygnd.io`, `pygnd.quaternions`, `pygnd.rotations`, and the `pygnd_calculate` CLI — see the coverage badge/report above for current numbers.
-
-```bash
-# Install with dev dependencies (pytest, pytest-cov, pylint)
-uv sync --all-extras --dev
-
-# Run tests
-uv run pytest
-
-# Run with an HTML coverage report
-uv run pytest --cov=pygnd --cov-report=html
-```
 
 ## Contributing
 
@@ -191,15 +167,15 @@ Contributions are welcome! Please feel free to submit a Pull Request. Before sub
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
 
-## Citation
+## Uses in the literature
 
-If you use this code in your research, please cite the original papers:
+A few papers that have used this code are provided below.
 
-1. Witzen, W.A., et al. (2020). "IN718 Paper". *International Journal of Plasticity*. [DOI: 10.1016/j.ijplas.2020.102709](https://doi.org/10.1016/j.ijplas.2020.102709)
+1. Lamb, J.D. et al. *On the role of geometrically necessary dislocations in void formation and growth in response to shock loading conditions in wrought and additively manufactured Ta.* [DOI: 10.1016/j.jmrt.2024.07.003](https://doi.org/10.1016/j.jmrt.2024.07.003)
 
-2. Witzen, W.A., et al. (2022). "Spalled Ta Paper". *Acta Materialia*. [DOI: 10.1016/j.actamat.2022.118366](https://doi.org/10.1016/j.actamat.2022.118366)
+2. Lamb, J.D. et al. *Quantification of melt pool dynamics and microstructure during simulated additive manufacturing.* [DOI: 10.1016/j.scriptamat.2024.116036](https://doi.org/10.1016/j.scriptamat.2024.116036)
 
-3. Witzen, W.A., et al. (2022). "AM Ta Paper". *Journal of Materials Science*. [DOI: 10.1007/s10853-022-07074-2](https://doi.org/10.1007/s10853-022-07074-2)
+3.  Witzen, W.A. et al. *Resolving crystallographic geometrically necessary dislocations in three dimensions in a hexagonal close packed titanium alloy.* [DOI: 10.1088/1361-651x/ad64f4](https://doi.org/10.1088/1361-651x/ad64f4)
 
 ## License
 
@@ -209,7 +185,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - **James Lamb** - Python implementation
 - **Wyatt Witzen** - Original MATLAB implementation and methodology
-
-## Acknowledgments
-
-This code uses Nye's dislocation theory to relate orientation curvature tensors to geometrically necessary dislocation densities. The methodology was developed by Wyatt Witzen for the analysis of TriBeam 3D microstructures.
