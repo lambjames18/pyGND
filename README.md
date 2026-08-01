@@ -1,5 +1,7 @@
 
-![main_logo](https://raw.githubusercontent.com/lambjames18/pyGND/main/resources/pyGND_logo.png)
+<p align="center">
+  <img src=https://raw.githubusercontent.com/lambjames18/pyGND/main/resources/pyGND_logo.png width="60%" alt="Main logo">
+</p>
 
 # pyGND
 
