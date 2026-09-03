@@ -1,0 +1,17 @@
+abstract: GND code for use with 3D EBSD data.
+authors:
+- affiliation: Sandia National Laboratories
+  family-names: James Lamb
+- affiliation: University of California Santa Barbara
+  family-names: Wyatt Witzen
+- family-names: mvailhe
+cff-version: 1.2.0
+date-released: '2026-09-03'
+doi: 10.5281/zenodo.22288598
+license:
+- mit
+message: If you use this software, please cite it using the metadata from this file.
+repository-code: https://github.com/lambjames18/pyGND/tree/v1.1.4
+title: lambjames18/pyGND
+type: software
+version: v1.1.4
