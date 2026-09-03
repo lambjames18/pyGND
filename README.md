@@ -178,13 +178,28 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
 
 ## Uses in the literature
 
-A few papers that have used this code are provided below.
+A few papers that have used this code are provided below. Please cite them in your work if you use this code.
 
 1. Lamb, J.D. et al. *On the role of geometrically necessary dislocations in void formation and growth in response to shock loading conditions in wrought and additively manufactured Ta.* [DOI: 10.1016/j.jmrt.2024.07.003](https://doi.org/10.1016/j.jmrt.2024.07.003)
 
 2. Lamb, J.D. et al. *Quantification of melt pool dynamics and microstructure during simulated additive manufacturing.* [DOI: 10.1016/j.scriptamat.2024.116036](https://doi.org/10.1016/j.scriptamat.2024.116036)
 
 3.  Witzen, W.A. et al. *Resolving crystallographic geometrically necessary dislocations in three dimensions in a hexagonal close packed titanium alloy.* [DOI: 10.1088/1361-651x/ad64f4](https://doi.org/10.1088/1361-651x/ad64f4)
+
+A zenodo citation for this repository is provided here as well.
+
+```
+@software{pyGND,
+  author       = {James Lamb and Wyatt Witzen},
+  title        = {lambjames18/pyGND},
+  month        = sep,
+  year         = 2026,
+  publisher    = {Zenodo},
+  version      = {v1.1.4},
+  doi          = {10.5281/zenodo.22288598},
+  url          = {https://doi.org/10.5281/zenodo.22288598},
+}
+```
 
 ## License
 
