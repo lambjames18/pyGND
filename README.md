@@ -13,6 +13,7 @@
 [![CI](https://github.com/lambjames18/pyGND/actions/workflows/cicd.yml/badge.svg)](https://github.com/lambjames18/pyGND/actions/workflows/cicd.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22288598.svg)](https://doi.org/10.5281/zenodo.22288598)
 
 pyGND is a Python package for calculating geometrically necessary dislocation (GND) densities from EBSD (Electron Backscatter Diffraction) data using Nye's dislocation theory. The code was originally developed in MATLAB by Wyatt Witzen and has been reimplemented in Python for improved performance and accessibility.
 
